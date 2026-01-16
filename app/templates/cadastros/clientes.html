@@ -1,0 +1,55 @@
+{% extends "layout.html" %}
+{% set title = "Clientes" %}
+{% set page_subtitle = "Gerencie clientes/sacados e dados de cobrança." %}
+
+{% block content %}
+<div class="flex items-center justify-between">
+  <div>
+    <div class="text-2xl font-semibold">Clientes</div>
+    <div class="text-sm text-slate-600">Cadastro de sacados (RF-001)</div>
+  </div>
+</div>
+
+<div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="glass rounded-2xl p-6 shadow">
+    <div class="text-sm font-semibold">Novo cliente</div>
+    <form class="mt-4 grid gap-3" method="post" action="/cadastros/clientes">
+      <input class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3" name="name" placeholder="Nome" required />
+      <input class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3" name="cpf_cnpj" placeholder="CPF/CNPJ" />
+      <input class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3" name="email" placeholder="E-mail" />
+      <textarea class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3" name="address" placeholder="Endereço"></textarea>
+      <textarea class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3" name="notes" placeholder="Observações"></textarea>
+      <button class="rounded-xl bg-slate-900 px-4 py-3 text-white hover:bg-slate-800">Salvar</button>
+    </form>
+  </div>
+
+  <div class="glass rounded-2xl p-6 shadow lg:col-span-2">
+    <div class="text-sm font-semibold">Lista</div>
+    <div class="mt-4 overflow-auto">
+      <table class="w-full text-sm">
+        <thead class="text-left text-slate-500">
+          <tr>
+            <th class="py-2">Nome</th>
+            <th class="py-2">CPF/CNPJ</th>
+            <th class="py-2">E-mail</th>
+            <th class="py-2">Ativo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in clientes %}
+          <tr class="border-t border-slate-200/70">
+            <td class="py-2 font-medium">{{ c.name }}</td>
+            <td class="py-2">{{ c.cpf_cnpj or "-" }}</td>
+            <td class="py-2">{{ c.email or "-" }}</td>
+            <td class="py-2">{{ "Sim" if c.active else "Não" }}</td>
+          </tr>
+          {% endfor %}
+          {% if clientes|length == 0 %}
+          <tr><td class="py-3 text-slate-600" colspan="4">Nenhum cliente cadastrado.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

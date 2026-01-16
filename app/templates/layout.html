@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ title or "ERP Financeiro" }}</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Tailwind config (paleta base: verde/amarelo/dark) -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brandGreen: '#08843b',
+            brandYellow: '#c6c335',
+            brandDark: '#2b2e34',
+          },
+          boxShadow: {
+            soft: '0 12px 30px rgba(0,0,0,.10)',
+            glow: '0 20px 70px rgba(8,132,59,.25)',
+          },
+          keyframes: {
+            floaty: { '0%,100%': { transform: 'translateY(0px)' }, '50%': { transform: 'translateY(-6px)' } },
+            shimmer: { '0%': { transform: 'translateX(-60%)' }, '100%': { transform: 'translateX(160%)' } },
+            pop: { '0%': { transform: 'scale(.98)', opacity: .0 }, '100%': { transform: 'scale(1)', opacity: 1 } }
+          },
+          animation: {
+            floaty: 'floaty 6s ease-in-out infinite',
+            shimmer: 'shimmer 1.35s ease-in-out infinite',
+            pop: 'pop .35s ease-out both'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Icons (Lucide) -->
+  <script src="https://unpkg.com/lucide@0.465.0/dist/umd/lucide.min.js"></script>
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+  <!-- VanillaTilt -->
+  <script src="https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js"></script>
+
+  <!-- Chart.js (dashboard) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- CountUp (dashboard) -->
+  <script src="https://cdn.jsdelivr.net/npm/countup.js@2.8.0/dist/countUp.umd.js"></script>
+
+  <!-- tippy (tooltips) -->
+  <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/animations/scale.css">
+  <script src="https://unpkg.com/@popperjs/core@2"></script>
+  <script src="https://unpkg.com/tippy.js@6"></script>
+
+  <!-- tsParticles -->
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
+
+  <style>
+    /* Scrollbar premium */
+    *{ scrollbar-width: thin; scrollbar-color: rgba(8,132,59,.35) rgba(0,0,0,0); }
+    *::-webkit-scrollbar{ width: 10px; height: 10px; }
+    *::-webkit-scrollbar-thumb{ background: rgba(8,132,59,.35); border-radius: 999px; border: 2px solid rgba(255,255,255,.35); }
+    *::-webkit-scrollbar-track{ background: transparent; }
+
+    /* Glass base */
+    .glass{
+      background: rgba(255,255,255,.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(0,0,0,.06);
+    }
+    .dark .glass{
+      background: rgba(17,19,23,.62);
+      border-color: rgba(255,255,255,.08);
+    }
+
+    /* Subtle grid overlay */
+    .grid-overlay{
+      background-image:
+        radial-gradient(circle at 20% 10%, rgba(198,195,53,.18), transparent 45%),
+        radial-gradient(circle at 70% 30%, rgba(8,132,59,.18), transparent 55%),
+        radial-gradient(circle at 50% 100%, rgba(8,132,59,.12), transparent 45%),
+        linear-gradient(to right, rgba(0,0,0,.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,0,0,.04) 1px, transparent 1px);
+      background-size: auto, auto, auto, 56px 56px, 56px 56px;
+      background-position: center;
+    }
+    .dark .grid-overlay{
+      background-image:
+        radial-gradient(circle at 20% 10%, rgba(198,195,53,.14), transparent 48%),
+        radial-gradient(circle at 70% 30%, rgba(8,132,59,.18), transparent 58%),
+        radial-gradient(circle at 50% 100%, rgba(8,132,59,.10), transparent 48%),
+        linear-gradient(to right, rgba(255,255,255,.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px);
+    }
+
+    /* Shimmer skeleton */
+    .skeleton{
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(90deg, rgba(0,0,0,.05), rgba(0,0,0,.10), rgba(0,0,0,.05));
+    }
+    .dark .skeleton{
+      background: linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.10), rgba(255,255,255,.06));
+    }
+    .skeleton::after{
+      content:"";
+      position:absolute; inset:0;
+      width: 40%;
+      transform: translateX(-60%);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+      opacity:.6;
+      animation: shimmer 1.35s ease-in-out infinite;
+    }
+    .dark .skeleton::after{
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent);
+      opacity:.8;
+    }
+
+    /* Ripple effect */
+    .ripple{ position: relative; overflow: hidden; }
+    .ripple span.rip{
+      position: absolute; border-radius: 999px; transform: translate(-50%,-50%);
+      background: rgba(198,195,53,.35);
+      pointer-events: none;
+      animation: rip .6s ease-out forwards;
+      mix-blend-mode: multiply;
+    }
+    .dark .ripple span.rip{ background: rgba(198,195,53,.25); mix-blend-mode: screen; }
+    @keyframes rip { from { width: 0; height: 0; opacity: .9; } to { width: 520px; height: 520px; opacity: 0; } }
+  </style>
+
+  {% block head_extra %}{% endblock %}
+</head>
+
+<body class="h-full bg-white text-slate-900 dark:bg-[#0b0d10] dark:text-slate-100">
+  <!-- Background layers -->
+  <div class="fixed inset-0 grid-overlay"></div>
+  <div id="tsparticles" class="fixed inset-0 pointer-events-none"></div>
+
+  {% set _hide_shell = (hide_shell is defined and hide_shell) %}
+  {% set _path = request.url.path if request else "" %}
+  {% set _page_title = page_title if page_title is defined else (title if title is defined else "Painel") %}
+  {% set _page_subtitle = page_subtitle if page_subtitle is defined else (subtitle if subtitle is defined else "") %}
+
+  {# ===== ABRE CONTAINER (sem duplicar block) ===== #}
+  {% if _hide_shell %}
+    <main class="relative min-h-full p-6">
+  {% else %}
+    <div class="relative min-h-full">
+      <div class="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 py-6">
+        <div class="grid grid-cols-12 gap-6">
+
+          <!-- SIDEBAR -->
+          {% if user %}
+          <aside class="col-span-12 lg:col-span-3 xl:col-span-2">
+            <div class="glass shadow-soft rounded-3xl p-4 lg:p-5 sticky top-6">
+
+              <!-- Brand -->
+              <div class="flex items-center gap-3">
+                <div class="h-11 w-11 rounded-2xl bg-[radial-gradient(circle_at_30%_20%,rgba(198,195,53,.45),transparent_55%),radial-gradient(circle_at_70%_80%,rgba(8,132,59,.45),transparent_55%)] border border-black/5 dark:border-white/10 flex items-center justify-center shadow-glow">
+                  <span class="text-brandGreen font-semibold">E</span>
+                </div>
+                <div class="min-w-0">
+                  <p class="text-sm text-slate-600 dark:text-slate-300">Admin</p>
+                  <h1 class="font-semibold leading-tight text-slate-900 dark:text-white truncate">ERP Financeiro</h1>
+                </div>
+              </div>
+
+              <!-- Quick actions -->
+              <div class="mt-4 rounded-2xl p-4 bg-[linear-gradient(135deg,rgba(8,132,59,.12),rgba(198,195,53,.12))] border border-black/5 dark:border-white/10">
+                <p class="text-sm text-slate-700 dark:text-slate-200 font-medium">Ações rápidas</p>
+                <div class="mt-3 grid grid-cols-2 gap-2">
+                  <a href="/lancamentos?competence={{ competence }}"
+                     class="ripple inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium bg-brandGreen text-white hover:opacity-95 shadow-soft"
+                     data-tip="Adicionar entrada/saída">
+                    <i data-lucide="plus" class="h-4 w-4"></i> Lançar
+                  </a>
+                  <a href="/boletos?competence={{ competence }}"
+                     class="ripple inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium bg-white/80 dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white dark:hover:bg-white/15"
+                     data-tip="Ir para boletos/CNAB">
+                    <i data-lucide="barcode" class="h-4 w-4 text-brandGreen"></i> Boletos
+                  </a>
+                </div>
+              </div>
+
+              <!-- Nav -->
+              <nav class="mt-5 space-y-1" id="nav">
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5
+                          {% if _path == '/' or _path.startswith('/dashboard') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/">
+                  <span class="h-9 w-9 rounded-xl bg-white/70 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="layout-dashboard" class="h-5 w-5 {% if _path == '/' or _path.startswith('/dashboard') %}text-brandGreen{% else %}text-slate-700 dark:text-slate-200 group-hover:text-brandGreen{% endif %}"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">Dashboard</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">KPIs e saldo</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5
+                          {% if _path.startswith('/lancamentos') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/lancamentos?competence={{ competence }}">
+                  <span class="h-9 w-9 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="arrow-left-right" class="h-5 w-5 {% if _path.startswith('/lancamentos') %}text-brandGreen{% else %}text-slate-700 dark:text-slate-200 group-hover:text-brandGreen{% endif %}"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">Lançamentos</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">entradas e saídas</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5
+                          {% if _path.startswith('/cadastros') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/cadastros/clientes">
+                  <span class="h-9 w-9 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="users" class="h-5 w-5 {% if _path.startswith('/cadastros') %}text-brandGreen{% else %}text-slate-700 dark:text-slate-200 group-hover:text-brandGreen{% endif %}"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">Cadastros</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">clientes e contas</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5
+                          {% if _path.startswith('/receber') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/receber?competence={{ competence }}">
+                  <span class="h-9 w-9 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="file-text" class="h-5 w-5 {% if _path.startswith('/receber') %}text-brandGreen{% else %}text-slate-700 dark:text-slate-200 group-hover:text-brandGreen{% endif %}"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">A Receber</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">parcelas e status</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5
+                          {% if _path.startswith('/boletos') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/boletos?competence={{ competence }}">
+                  <span class="h-9 w-9 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="barcode" class="h-5 w-5 {% if _path.startswith('/boletos') %}text-brandGreen{% else %}text-slate-700 dark:text-slate-200 group-hover:text-brandGreen{% endif %}"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">Boletos / CNAB</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">remessa e retorno</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5
+                          {% if _path.startswith('/conciliacao') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/conciliacao?competence={{ competence }}">
+                  <span class="h-9 w-9 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="scan" class="h-5 w-5 {% if _path.startswith('/conciliacao') %}text-brandGreen{% else %}text-slate-700 dark:text-slate-200 group-hover:text-brandGreen{% endif %}"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">Conciliação</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">OFX/CSV</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5
+                          {% if _path.startswith('/relatorios') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/relatorios/periodo?end={{ competence }}&months=6">
+                  <span class="h-9 w-9 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="bar-chart-3" class="h-5 w-5 {% if _path.startswith('/relatorios') %}text-brandGreen{% else %}text-slate-700 dark:text-slate-200 group-hover:text-brandGreen{% endif %}"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">Relatórios</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">1-6-12 meses</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10"
+                   href="/email/lote?competence={{ competence }}">
+                  <span class="h-9 w-9 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center">
+                    <i data-lucide="mail" class="h-5 w-5 text-slate-700 dark:text-slate-200 group-hover:text-brandGreen"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="font-medium leading-tight">E-mails</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 truncate">envio em lote</p>
+                  </div>
+                </a>
+
+              </nav>
+
+              <div class="mt-6 flex items-center justify-between rounded-2xl px-3 py-3 border border-black/5 dark:border-white/10 bg-white/60 dark:bg-white/5">
+                <div class="flex items-center gap-2">
+                  <span class="h-2.5 w-2.5 rounded-full bg-brandGreen animate-pulse"></span>
+                  <p class="text-sm text-slate-700 dark:text-slate-200">Operação normal</p>
+                </div>
+                <button id="themeBtn"
+                        class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white/90 dark:hover:bg-white/15"
+                        data-tip="Alternar tema">
+                  <i data-lucide="moon" class="h-4 w-4"></i>
+                  <span class="hidden sm:inline">Tema</span>
+                </button>
+              </div>
+
+              <div class="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                Logado como <span class="font-semibold text-slate-700 dark:text-slate-200">{{ user.email }}</span>
+              </div>
+
+            </div>
+          </aside>
+          {% endif %}
+
+          <!-- MAIN -->
+          <main class="{% if user %}col-span-12 lg:col-span-9 xl:col-span-10{% else %}col-span-12{% endif %}">
+            <!-- Topbar -->
+            <div class="glass shadow-soft rounded-3xl p-4 sm:p-5">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0">
+                  <h2 class="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white truncate">{{ _page_title }}</h2>
+                  {% if _page_subtitle %}
+                    <p class="text-sm text-slate-600 dark:text-slate-300">{{ _page_subtitle }}</p>
+                  {% else %}
+                    <p class="text-sm text-slate-600 dark:text-slate-300">Competência: <span class="font-semibold">{{ competence }}</span></p>
+                  {% endif %}
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-center">
+                  <form action="" method="get" class="relative">
+                    <i data-lucide="search" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                    <input
+                      name="q"
+                      value="{{ (request.query_params.get('q') if request else '') or '' }}"
+                      class="w-full sm:w-72 rounded-2xl pl-9 pr-3 py-2.5 text-sm bg-white/70 dark:bg-white/10 border border-black/10 dark:border-white/10 focus:outline-none focus:ring-4 focus:ring-brandGreen/15"
+                      placeholder="Buscar (cliente, descrição, referência)..."
+                    />
+                  </form>
+
+                  {% block topbar_actions %}
+                    <a class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-brandYellow text-brandDark hover:opacity-95 shadow-soft"
+                       href="/relatorios/periodo?end={{ competence }}&months=6"
+                       data-tip="Abrir relatório 6 meses">
+                      <i data-lucide="download" class="h-4 w-4"></i> Relatórios
+                    </a>
+                    {% if user %}
+                      <a class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-white/70 dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white dark:hover:bg-white/15"
+                         href="/logout"
+                         data-tip="Sair">
+                        <i data-lucide="log-out" class="h-4 w-4"></i> Sair
+                      </a>
+                    {% endif %}
+                  {% endblock %}
+                </div>
+              </div>
+            </div>
+
+            <!-- Page content -->
+            <div class="mt-6">
+  {% endif %}
+
+              {# ===== ÚNICO BLOCK CONTENT DO ARQUIVO ===== #}
+              {% block content %}{% endblock %}
+
+  {% if _hide_shell %}
+    </main>
+  {% else %}
+            </div>
+
+            <footer class="mt-6 pb-6 text-center text-xs text-slate-500 dark:text-slate-400">
+              © <span id="year"></span> • ERP Financeiro • UI Tailwind + GSAP
+            </footer>
+          </main>
+
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <script src="/static/js/app.js"></script>
+  {% block scripts_extra %}{% endblock %}
+</body>
+</html>

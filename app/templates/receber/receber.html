@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+{% set title = "Contas a Receber" %}
+{% set page_subtitle = "Parcelas, status e geração de cobranças por competência." %}
+
+{% block content %}
+<div class="flex items-start justify-between gap-6">
+  <div>
+    <div class="text-2xl font-semibold">Contas a Receber</div>
+    <div class="text-sm text-slate-600">Competência: <b>{{ competence }}</b></div>
+  </div>
+
+  <div class="glass rounded-2xl p-5 shadow w-full max-w-xl">
+    <div class="text-sm font-semibold">Ações</div>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button id="btnGerarParcelas" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white hover:bg-slate-800">Gerar parcelas do mês</button>
+      <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm hover:bg-slate-50" href="/boletos?competence={{ competence }}">Ir para boletos</a>
+    </div>
+    <div id="parcelasResult" class="mt-3 text-sm text-slate-700"></div>
+  </div>
+</div>
+
+<div class="mt-6 glass rounded-2xl p-6 shadow">
+  <div class="text-sm font-semibold">Parcelas geradas</div>
+  <div class="mt-4 overflow-auto">
+    <table class="w-full text-sm">
+      <thead class="text-left text-slate-500">
+        <tr>
+          <th class="py-2">ID</th>
+          <th class="py-2">Vencimento</th>
+          <th class="py-2">Valor</th>
+          <th class="py-2">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in itens %}
+        <tr class="border-t border-slate-200/70">
+          <td class="py-2">{{ it.id }}</td>
+          <td class="py-2">{{ it.due_date }}</td>
+          <td class="py-2">R$ {{ "%.2f"|format(it.amount) }}</td>
+          <td class="py-2"><span class="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs">{{ it.status }}</span></td>
+        </tr>
+        {% endfor %}
+        {% if itens|length == 0 %}
+        <tr><td class="py-3 text-slate-600" colspan="4">Nenhuma parcela. Clique em “Gerar parcelas do mês”.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const competence = "{{ competence }}";
+  document.getElementById("btnGerarParcelas").addEventListener("click", async () => {
+    try {
+      const res = await postJSON(`/receber/api/${competence}/gerar-parcelas`);
+      document.getElementById("parcelasResult").innerText = `Criadas: ${res.created} | Já existiam: ${res.skipped} | Vencimento padrão: ${res.due_date}`;
+      toast("Parcelas geradas. Recarregando...", "ok");
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      toast(e.message, "erro");
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% set title = "Fechamento" %}
+{% set page_subtitle = "Feche a competência e congele relatórios com trilha." %}
+
+{% block content %}
+<div class="flex items-start justify-between gap-6">
+  <div>
+    <div class="text-2xl font-semibold">Fechamento mensal</div>
+    <div class="text-sm text-slate-600">Competência: <b>{{ competence }}</b></div>
+    <div class="mt-2 text-sm text-slate-700">
+      Status: <span class="font-semibold">{{ close.status }}</span>
+    </div>
+  </div>
+
+  <div class="glass rounded-2xl p-5 shadow w-full max-w-2xl">
+    <div class="text-sm font-semibold">Ações</div>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button id="btnFechar" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white hover:bg-slate-800">Fechar competência (gerar PDF)</button>
+      <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm hover:bg-slate-50" href="/relatorios/fechamento/pdf?competence={{ competence }}">Baixar PDF</a>
+    </div>
+    <div id="res" class="mt-3 text-sm text-slate-700"></div>
+  </div>
+</div>
+
+<div class="mt-6 glass rounded-2xl p-6 shadow">
+  <div class="text-sm font-semibold">Último demonstrativo</div>
+  <div class="mt-3 text-sm text-slate-700">
+    {% if snap %}
+      <div>Gerado em: {{ snap.generated_at }}</div>
+      <div class="mt-1 text-xs text-slate-600 break-all">{{ snap.pdf_path }}</div>
+    {% else %}
+      <div class="text-slate-600">Ainda não gerado.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  const competence = "{{ competence }}";
+  document.getElementById("btnFechar").addEventListener("click", async () => {
+    try {
+      const res = await postJSON(`/relatorios/api/${competence}/fechar`);
+      document.getElementById("res").innerText = `Status: ${res.status} | PDF: ${res.pdf_path || "-"} | Entradas: ${res.totals?.entradas?.toFixed ? res.totals.entradas.toFixed(2) : "-"}`;
+      toast("Fechamento processado. Recarregando...", "ok");
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      toast(e.message, "erro");
+    }
+  });
+</script>
+{% endblock %}

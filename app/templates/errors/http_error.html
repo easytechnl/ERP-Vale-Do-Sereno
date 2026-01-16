@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% set title = "Erro" %}
+{% set hide_shell = true %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center px-4">
+  <div class="glass w-full max-w-lg rounded-2xl p-8 shadow-xl">
+    <div class="text-2xl font-semibold">Erro {{ status_code }}</div>
+    <div class="mt-2 text-sm text-slate-700">{{ detail }}</div>
+    <div class="mt-6">
+      <a class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm hover:bg-slate-50" href="/">Voltar</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

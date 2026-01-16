@@ -1,0 +1,86 @@
+{% extends "layout.html" %}
+{% set title = "Conciliação" %}
+{% set page_subtitle = "Importe extrato e realize o match com lançamentos." %}
+
+{% block content %}
+<div class="flex items-start justify-between gap-6">
+  <div>
+    <div class="text-2xl font-semibold">Conciliação Bancária (MVP)</div>
+    <div class="text-sm text-slate-600">Competência: <b>{{ competence }}</b></div>
+  </div>
+
+  <div class="glass rounded-2xl p-5 shadow w-full max-w-2xl">
+    <div class="text-sm font-semibold">Importação</div>
+    <div class="mt-3 grid gap-2 text-sm text-slate-700">
+      <div class="rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <div class="font-semibold">OFX</div>
+        <div class="text-xs text-slate-600">Estrutura pronta. Integre com ofx_service e endpoint dedicado.</div>
+      </div>
+
+      <form class="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center gap-2" action="/conciliacao/api/{{ competence }}/upload-csv" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" class="text-sm" required />
+        <button class="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800" type="submit">Enviar CSV (salvar)</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="glass rounded-2xl p-6 shadow">
+    <div class="text-sm font-semibold">Extratos importados</div>
+    <div class="mt-3 space-y-2 text-sm">
+      {% for imp in imports %}
+        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <div class="font-semibold">#{{ imp.id }} — {{ imp.source_type }}</div>
+          <div class="text-xs text-slate-600 break-all">{{ imp.file_path }}</div>
+        </div>
+      {% endfor %}
+      {% if imports|length == 0 %}
+        <div class="text-slate-600">Nenhum extrato importado ainda.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="glass rounded-2xl p-6 shadow lg:col-span-2">
+    <div class="text-sm font-semibold">Espelho do extrato (transações)</div>
+    <div class="mt-4 overflow-auto">
+      <table class="w-full text-sm">
+        <thead class="text-left text-slate-500">
+          <tr>
+            <th class="py-2">Data</th>
+            <th class="py-2">Histórico</th>
+            <th class="py-2">Valor</th>
+            <th class="py-2">Tipo</th>
+            <th class="py-2">Conciliação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in txns %}
+          <tr class="border-t border-slate-200/70 align-top">
+            <td class="py-2">{{ t.txn_date }}</td>
+            <td class="py-2">{{ t.description }}</td>
+            <td class="py-2">R$ {{ "%.2f"|format(t.amount) }}</td>
+            <td class="py-2">{{ t.kind }}</td>
+            <td class="py-2">
+              <form class="flex items-center gap-2" action="/conciliacao/api/{{ competence }}/conciliar" method="post">
+                <input type="hidden" name="bank_txn_id" value="{{ t.id }}" />
+                <select name="installment_id" class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs" required>
+                  <option value="" selected disabled>Selecionar parcela</option>
+                  {% for p in installments %}
+                    <option value="{{ p.id }}">#{{ p.id }} — R$ {{ "%.2f"|format(p.amount) }} — {{ p.status }}</option>
+                  {% endfor %}
+                </select>
+                <button class="rounded-lg bg-slate-900 px-3 py-1.5 text-xs text-white hover:bg-slate-800">Conciliar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          {% if txns|length == 0 %}
+          <tr><td class="py-3 text-slate-600" colspan="5">Sem transações (OFX/CSV parser ainda não gerou transações).</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

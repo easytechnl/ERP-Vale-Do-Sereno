@@ -1,0 +1,248 @@
+{% extends "layout.html" %}
+{% set title = "Lançamentos (Entradas/Saídas)" %}
+{% set page_subtitle = "Cadastre entradas e saídas e concilie com a conta/cliente." %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+    <div>
+      <div class="text-sm text-slate-600">Competência</div>
+      <div class="mt-1 text-3xl font-semibold">{{ competence|competence_br }}</div>
+      <div class="mt-2 text-sm text-slate-600">Entradas: <b>R$ {{ '%.2f'|format(totals.entradas) }}</b> · Saídas: <b>R$ {{ '%.2f'|format(totals.saidas) }}</b> · Saldo: <b>R$ {{ '%.2f'|format(totals.saldo) }}</b></div>
+    </div>
+
+    <form class="glass rounded-2xl p-4 shadow w-full md:w-auto" method="get" action="/lancamentos">
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-2 text-sm">
+        <div>
+          <label class="text-slate-600">Competência</label>
+          <input type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="competence" value="{{ competence }}" placeholder="MM/AAAA" />
+        </div>
+        <div>
+          <label class="text-slate-600">Tipo</label>
+          <select class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="kind">
+            <option value="" {% if not filters.kind %}selected{% endif %}>Todos</option>
+            <option value="ENTRADA" {% if filters.kind=='ENTRADA' %}selected{% endif %}>Entrada</option>
+            <option value="SAIDA" {% if filters.kind=='SAIDA' %}selected{% endif %}>Saída</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-slate-600">Status</label>
+          <select class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="status">
+            <option value="" {% if not filters.status %}selected{% endif %}>Todos</option>
+            <option value="REALIZADO" {% if filters.status=='REALIZADO' %}selected{% endif %}>Realizado</option>
+            <option value="PREVISTO" {% if filters.status=='PREVISTO' %}selected{% endif %}>Previsto</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-slate-600">Conta</label>
+          <select class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="bank_account_id">
+            <option value="">Todas</option>
+            {% for a in accounts %}
+              <option value="{{ a.id }}" {% if filters.bank_account_id and filters.bank_account_id==a.id %}selected{% endif %}>{{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="text-slate-600">Cliente</label>
+          <select class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="customer_id">
+            <option value="">Todos</option>
+            {% for c in customers %}
+              <option value="{{ c.id }}" {% if filters.customer_id and filters.customer_id==c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="text-slate-600">Busca</label>
+          <input class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="q" value="{{ filters.q or '' }}" placeholder="descrição/categoria" />
+        </div>
+      </div>
+      <div class="mt-3 flex justify-end gap-2">
+        <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50" href="/lancamentos?competence={{ competence }}">Limpar</a>
+        <button class="rounded-xl bg-slate-900 text-white px-3 py-2 text-sm hover:opacity-90" type="submit">Filtrar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div id="novo" class="glass rounded-2xl p-5 shadow">
+      <div class="text-sm font-semibold">Novo lançamento</div>
+      <form class="mt-4 grid gap-3 text-sm" method="post" action="/lancamentos/novo">
+        <input type="hidden" name="competence" value="{{ competence }}" />
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-slate-600">Data</label>
+            <input type="date" name="entry_date" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required />
+          </div>
+          <div>
+            <label class="text-slate-600">Tipo</label>
+            <select name="kind" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required>
+              <option value="ENTRADA">Entrada</option>
+              <option value="SAIDA">Saída</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-slate-600">Valor</label>
+            <input type="number" step="0.01" name="amount" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required />
+          </div>
+          <div>
+            <label class="text-slate-600">Status</label>
+            <select name="status" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <option value="REALIZADO" selected>Realizado</option>
+              <option value="PREVISTO">Previsto</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-3">
+          <div class="text-xs font-semibold text-slate-700">Repetição (opcional)</div>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-slate-600">Repetir mensalmente</label>
+              <select name="repeat_extra_months" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <option value="0" selected>Não repetir</option>
+                <option value="1">+1 mês</option>
+                <option value="2">+2 meses</option>
+                <option value="12">+12 meses (1 ano)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-slate-600">Ou repetir até</label>
+              <input type="date" name="repeat_until" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
+            </div>
+          </div>
+          <div class="mt-2 text-xs text-slate-500">Se “repetir até” estiver preenchido, ele tem prioridade sobre “+1/+2/+12 meses”.</div>
+        </div>
+
+        <div>
+          <label class="text-slate-600">Descrição</label>
+          <input name="description" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="Ex.: Entrada Estabelecimento X" required />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-slate-600">Categoria</label>
+            <input name="category" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="Ex.: Mensalidade" />
+          </div>
+          <div>
+            <label class="text-slate-600">Centro de custo</label>
+            <input name="cost_center" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="Ex.: Projeto A" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-slate-600">Conta bancária</label>
+            <select name="bank_account_id" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <option value="">(não informado)</option>
+              {% for a in accounts %}
+                <option value="{{ a.id }}">{{ a.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="text-slate-600">Cliente (opcional)</label>
+            <select name="customer_id" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <option value="">(não informado)</option>
+              {% for c in customers %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-slate-600">Observações</label>
+          <textarea name="notes" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" rows="3" placeholder="Opcional"></textarea>
+        </div>
+
+        <button class="rounded-xl bg-slate-900 text-white px-4 py-2.5 hover:opacity-90" type="submit">Salvar</button>
+      </form>
+    </div>
+
+    <div class="glass rounded-2xl p-5 shadow lg:col-span-2 overflow-x-auto">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-semibold">Lançamentos do filtro</div>
+        <div class="text-xs text-slate-500">{{ entries|length }} registro(s)</div>
+      </div>
+
+      {% if entries|length == 0 %}
+        <div class="mt-4 rounded-2xl border border-black/5 dark:border-white/10 bg-white/50 dark:bg-white/5 p-5">
+          <div class="text-sm font-semibold text-slate-900 dark:text-white">Sem lançamentos no filtro</div>
+          <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">Use o formulário ao lado para cadastrar uma entrada/saída ou ajuste os filtros acima.</div>
+          <div class="mt-4 flex gap-2">
+            <a href="#novo" class="ripple rounded-2xl px-4 py-2 text-sm font-semibold bg-brandGreen text-white hover:opacity-95">Criar primeiro lançamento</a>
+            <a href="/lancamentos?competence={{ competence }}" class="ripple rounded-2xl px-4 py-2 text-sm font-semibold bg-white/70 dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white dark:hover:bg-white/15">Limpar filtros</a>
+          </div>
+        </div>
+      {% endif %}
+
+      <table class="mt-4 w-full text-sm">
+        <thead>
+          <tr class="text-left text-slate-600">
+            <th class="py-2">Data</th>
+            <th class="py-2">Tipo</th>
+            <th class="py-2">Descrição</th>
+            <th class="py-2">Conta</th>
+            <th class="py-2">Cliente</th>
+            <th class="py-2 text-right">Valor</th>
+            <th class="py-2">Status</th>
+            <th class="py-2 text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in entries %}
+          <tr class="border-t border-slate-200/70">
+            <td class="py-2 whitespace-nowrap">{{ e.entry_date }}</td>
+            <td class="py-2">
+              {% if e.kind == 'ENTRADA' %}
+                <span class="rounded-full bg-emerald-100 text-emerald-800 px-2 py-1 text-xs">Entrada</span>
+              {% else %}
+                <span class="rounded-full bg-rose-100 text-rose-800 px-2 py-1 text-xs">Saída</span>
+              {% endif %}
+            </td>
+            <td class="py-2">
+              <div class="font-medium">{{ e.description }}</div>
+              <div class="text-xs text-slate-500">
+                {{ e.category or '-' }} · {{ e.cost_center or '-' }}
+              </div>
+            </td>
+            <td class="py-2">{{ e.bank_account.name if e.bank_account else '-' }}</td>
+            <td class="py-2">{{ e.customer.name if e.customer else '-' }}</td>
+            <td class="py-2 text-right">R$ {{ '%.2f'|format(e.amount) }}</td>
+            <td class="py-2">
+              {% if e.status == 'REALIZADO' %}
+                <span class="rounded-full bg-slate-100 text-slate-800 px-2 py-1 text-xs">Realizado</span>
+              {% else %}
+                <span class="rounded-full bg-amber-100 text-amber-800 px-2 py-1 text-xs">Previsto</span>
+              {% endif %}
+            </td>
+            <td class="py-2 text-right">
+              <form method="post" action="/lancamentos/{{ e.id }}/delete" onsubmit="return confirm('Excluir este lançamento?');">
+                <input type="hidden" name="competence" value="{{ competence }}" />
+                <button class="ripple rounded-xl px-3 py-2 text-xs font-semibold bg-white/70 dark:bg-white/10 border border-rose-200/60 dark:border-rose-500/20 text-rose-700 dark:text-rose-200 hover:bg-white dark:hover:bg-white/15" type="submit">
+                  Excluir
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+  // Define data padrão no formulário (hoje)
+  (() => {
+    const el = document.querySelector('input[name="entry_date"]');
+    if (el && !el.value) el.value = new Date().toISOString().slice(0, 10);
+  })();
+</script>
+{% endblock %}

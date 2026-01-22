@@ -1,0 +1,265 @@
+from __future__ import annotations
+
+import csv
+from io import StringIO
+from typing import Iterable
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_db
+from app.core.templating import templates
+from app.core.utils import normalize_competence
+from app.modules.auth.utils import require_login
+from app.modules.relatorios.service import (
+    close_month,
+    generate_lancamentos_pdf_export,
+    generate_periodo_pdf_snapshot,
+    get_or_create_monthly_close,
+    latest_demonstrativo,
+    list_lancamentos_for_export,
+    periodo_report,
+)
+
+router = APIRouter(prefix="/relatorios", tags=["relatorios"])
+
+
+DEFAULT_FIELDS = [
+    "id",
+    "competence_month",
+    "entry_date",
+    "kind",
+    "status",
+    "amount",
+    "description",
+    "category",
+    "cost_center",
+    "bank_account_id",
+    "customer_id",
+    "notes",
+    "created_at",
+]
+
+
+def _csv_stream(rows: list[dict], fieldnames: list[str]) -> Iterable[bytes]:
+    """Gera CSV (UTF-8 com BOM) em streaming para melhor compatibilidade com Excel."""
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, delimiter=";")
+
+    writer.writeheader()
+    header_chunk = output.getvalue()
+    output.seek(0)
+    output.truncate(0)
+    yield ("\ufeff" + header_chunk).encode("utf-8")
+
+    for r in rows:
+        # garante que todas as chaves existam
+        safe = {k: ("" if r.get(k) is None else r.get(k)) for k in fieldnames}
+        writer.writerow(safe)
+        chunk = output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        if chunk:
+            yield chunk.encode("utf-8")
+
+
+def _csv_response(payload: dict, filename: str) -> StreamingResponse:
+    rows = payload.get("rows", []) or []
+    if rows:
+        fieldnames = list(rows[0].keys())
+    else:
+        fieldnames = DEFAULT_FIELDS
+
+    return StreamingResponse(
+        _csv_stream(rows, fieldnames),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("")
+@router.get("/")
+def relatorios_home(
+    request: Request,
+    end: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    """Painel de relatórios (cards) — acessado ao clicar em "Relatórios"."""
+    import datetime
+
+    competence = normalize_competence(end) or datetime.date.today().strftime("%Y-%m")
+    close = get_or_create_monthly_close(db, competence)
+
+    return templates.TemplateResponse(
+        "relatorios/index.html",
+        {
+            "request": request,
+            "user": user,
+            "competence": competence,
+            "close": close,
+        },
+    )
+
+
+@router.get("/fechamento")
+def fechamento_page(
+    request: Request,
+    competence: str,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    close = get_or_create_monthly_close(db, competence)
+    snap = latest_demonstrativo(db, competence)
+    return templates.TemplateResponse(
+        "relatorios/fechamento.html",
+        {"request": request, "user": user, "competence": competence, "close": close, "snap": snap},
+    )
+
+
+@router.post("/api/{competence}/fechar")
+def api_fechar(competence: str, user=Depends(require_login), db: Session = Depends(get_db)):
+    competence = normalize_competence(competence) or competence
+    return close_month(db, competence)
+
+
+@router.get("/fechamento/pdf")
+def download_fechamento_pdf(competence: str, user=Depends(require_login), db: Session = Depends(get_db)):
+    competence = normalize_competence(competence) or competence
+    snap = latest_demonstrativo(db, competence)
+    if not snap or not snap.pdf_path:
+        return {"error": "Fechamento não gerado"}
+    return FileResponse(path=snap.pdf_path, filename=f"demonstrativo_{competence}.pdf", media_type="application/pdf")
+
+
+@router.get("/periodo")
+def periodo_page(
+    request: Request,
+    end: str,
+    months: int = 6,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    end = normalize_competence(end) or end
+    data = periodo_report(db, end_ym=end, months=months)
+    return templates.TemplateResponse(
+        "relatorios/periodo.html",
+        {"request": request, "user": user, "competence": end, "data": data},
+    )
+
+
+@router.get("/periodo/pdf")
+def periodo_pdf(end: str, months: int = 6, user=Depends(require_login), db: Session = Depends(get_db)):
+    end = normalize_competence(end) or end
+    path = generate_periodo_pdf_snapshot(db, end_ym=end, months=months)
+    fname = f"relatorio_periodo_{end}_{months}m.pdf"
+    return FileResponse(path=path, filename=fname, media_type="application/pdf")
+
+
+@router.get("/export/entradas.csv")
+def export_entradas_csv(
+    start: str | None = None,
+    end: str | None = None,
+    status: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    start = normalize_competence(start) if start else None
+    end = normalize_competence(end) if end else None
+    payload = list_lancamentos_for_export(db, kind="ENTRADA", start_ym=start, end_ym=end, status=status)
+    fname = "entradas.csv" if not (start or end or status) else f"entradas_{start or 'ini'}_{end or 'fim'}_{status or 'todos'}.csv"
+    return _csv_response(payload, fname)
+
+
+@router.get("/export/saidas.csv")
+def export_saidas_csv(
+    start: str | None = None,
+    end: str | None = None,
+    status: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    start = normalize_competence(start) if start else None
+    end = normalize_competence(end) if end else None
+    payload = list_lancamentos_for_export(db, kind="SAIDA", start_ym=start, end_ym=end, status=status)
+    fname = "saidas.csv" if not (start or end or status) else f"saidas_{start or 'ini'}_{end or 'fim'}_{status or 'todos'}.csv"
+    return _csv_response(payload, fname)
+
+
+@router.get("/export/completo.csv")
+def export_completo_csv(
+    start: str | None = None,
+    end: str | None = None,
+    status: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    start = normalize_competence(start) if start else None
+    end = normalize_competence(end) if end else None
+    payload = list_lancamentos_for_export(db, kind=None, start_ym=start, end_ym=end, status=status)
+    fname = "relatorio_completo.csv" if not (start or end or status) else f"relatorio_completo_{start or 'ini'}_{end or 'fim'}_{status or 'todos'}.csv"
+    return _csv_response(payload, fname)
+
+
+@router.get("/export/entradas.pdf")
+def export_entradas_pdf(
+    start: str | None = None,
+    end: str | None = None,
+    status: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    start = normalize_competence(start) if start else None
+    end = normalize_competence(end) if end else None
+    path = generate_lancamentos_pdf_export(
+        db,
+        kind="ENTRADA",
+        start_ym=start,
+        end_ym=end,
+        status=status,
+        title="Relatório de Entradas (MVP)",
+    )
+    return FileResponse(path=path, filename="entradas.pdf", media_type="application/pdf")
+
+
+@router.get("/export/saidas.pdf")
+def export_saidas_pdf(
+    start: str | None = None,
+    end: str | None = None,
+    status: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    start = normalize_competence(start) if start else None
+    end = normalize_competence(end) if end else None
+    path = generate_lancamentos_pdf_export(
+        db,
+        kind="SAIDA",
+        start_ym=start,
+        end_ym=end,
+        status=status,
+        title="Relatório de Saídas (MVP)",
+    )
+    return FileResponse(path=path, filename="saidas.pdf", media_type="application/pdf")
+
+
+@router.get("/export/completo.pdf")
+def export_completo_pdf(
+    start: str | None = None,
+    end: str | None = None,
+    status: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    start = normalize_competence(start) if start else None
+    end = normalize_competence(end) if end else None
+    path = generate_lancamentos_pdf_export(
+        db,
+        kind=None,
+        start_ym=start,
+        end_ym=end,
+        status=status,
+        title="Relatório Completo (MVP)",
+    )
+    return FileResponse(path=path, filename="relatorio_completo.pdf", media_type="application/pdf")

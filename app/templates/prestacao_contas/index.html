@@ -1,0 +1,199 @@
+{% extends "layout.html" %}
+{% set title = "Prestação de Contas" %}
+{% set page_subtitle = "Resumo do mês, variação em relação ao mês anterior e situação dos boletos." %}
+
+{% block content %}
+{% set cur = data.current %}
+{% set prev = data.previous %}
+{% set delta = data.delta %}
+{% set b = data.boletos %}
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+  <div class="glass rounded-2xl p-6 shadow xl:col-span-2">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <div class="text-sm font-semibold">Variação do mês</div>
+        <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">
+          Comparação entre <b>{{ prev.competence }}</b> e <b>{{ cur.competence|competence_br }}</b> (com base no extrato OFX importado + lançamentos manuais).
+        </div>
+      </div>
+      <div class="text-xs text-slate-500 dark:text-slate-400">
+        Transações no extrato: <b>{{ cur.transactions }}</b>
+      </div>
+    </div>
+
+    <div class="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
+        <div class="text-xs text-slate-600 dark:text-slate-300">Entrou ({{ cur.competence|competence_br }})</div>
+        <div class="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-300">R$ {{ '%.2f'|format(cur.entradas) }}</div>
+        <div class="mt-1 text-xs text-slate-500">Δ {{ '%.2f'|format(delta.entradas) }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
+        <div class="text-xs text-slate-600 dark:text-slate-300">Saiu ({{ cur.competence|competence_br }})</div>
+        <div class="mt-1 text-lg font-semibold text-rose-700 dark:text-rose-300">R$ {{ '%.2f'|format(cur.saidas) }}</div>
+        <div class="mt-1 text-xs text-slate-500">Δ {{ '%.2f'|format(delta.saidas) }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
+        <div class="text-xs text-slate-600 dark:text-slate-300">Saldo final (com ajuste)</div>
+        <div class="mt-1 text-lg font-semibold text-brandGreen">R$ {{ '%.2f'|format(cur.saldo) }}</div>
+        <div class="mt-1 text-xs text-slate-500">Δ {{ '%.2f'|format(delta.saldo) }}{% if data.saldo_var_pct is not none %} • {{ '%.2f'|format(data.saldo_var_pct) }}%{% endif %}</div>
+        <div class="mt-2 text-[11px] text-slate-500">Ajuste manual: <b>R$ {{ '%.2f'|format(cur.saldo_adjustment) }}</b> (Δ {{ '%.2f'|format(delta.saldo_adjustment) }})</div>
+      </div>
+    </div>
+
+    
+    <div class="mt-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/10 p-4">
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-sm font-semibold">Entradas x Saídas x Saldo (últimos 6 meses)</div>
+        <div class="text-xs text-slate-500">Fonte: extratos OFX importados + lançamentos manuais + ajuste manual</div>
+      </div>
+      <div class="mt-3">
+        <canvas id="flowChart" height="110"></canvas>
+      </div>
+
+      <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-white">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-500">
+            <tr>
+              <th class="py-2.5 px-3 text-left">Competência</th>
+              <th class="py-2.5 px-3 text-right">Saldo final</th>
+              <th class="py-2.5 px-3 text-right">Variação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in data.saldo_variations %}
+              <tr class="border-t border-slate-200/70 hover:bg-slate-50/60">
+                <td class="py-2.5 px-3 font-medium text-slate-900">{{ row.competence|competence_br }}</td>
+                <td class="py-2.5 px-3 text-right font-semibold">R$ {{ '%.2f'|format(row.saldo) }}</td>
+                <td class="py-2.5 px-3 text-right text-xs text-slate-600">
+                  {% if row.delta is none %}
+                    —
+                  {% else %}
+                    Δ {{ '%.2f'|format(row.delta) }}{% if row.delta_pct is not none %} ({{ '%.2f'|format(row.delta_pct) }}%){% endif %}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      (function(){
+        const labels = {{ data.series.labels|tojson }};
+        const entradas = {{ data.series.entradas|tojson }};
+        const saidas = {{ data.series.saidas|tojson }};
+        const ajustes = {{ data.series.ajustes|tojson }};
+        const saldo = {{ data.series.saldo|tojson }};
+        const ctx = document.getElementById('flowChart');
+        if (!ctx || !window.Chart) return;
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels.map(l => (l || '').slice(0,7)),
+            datasets: [
+              { label: 'Entradas', data: entradas, tension: 0.25 },
+              { label: 'Saídas', data: saidas, tension: 0.25 },
+              { label: 'Ajuste manual', data: ajustes, type: 'bar' },
+              { label: 'Saldo final', data: saldo, tension: 0.25 },
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: true, position: 'bottom' },
+              tooltip: { callbacks: { label: (ctx)=> `${ctx.dataset.label}: R$ ${Number(ctx.parsed.y||0).toFixed(2)}` } }
+            },
+            scales: {
+              y: { ticks: { callback: (v)=> `R$ ${v}` } }
+            }
+          }
+        });
+      })();
+    </script>
+
+{% if not cur.has_statement %}
+      <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        Nenhum extrato OFX importado para <b>{{ cur.competence|competence_br }}</b>. Importe em <a class="underline" href="/conciliacao?competence={{ competence }}">Conciliação</a> para preencher estes números.
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="glass rounded-2xl p-6 shadow">
+    <div class="text-sm font-semibold">Boletos do mês</div>
+    <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">O que <b>deve entrar</b> com base nas parcelas/boletos da competência.</div>
+
+    <div class="mt-5 space-y-3">
+      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
+        <div class="text-xs text-slate-600 dark:text-slate-300">Total esperado</div>
+        <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(b.expected) }}</div>
+        <div class="mt-1 text-[11px] text-slate-500">Parcelas: <b>{{ b.installments_count }}</b></div>
+      </div>
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+        <div class="text-xs text-emerald-800">Pago</div>
+        <div class="mt-1 text-lg font-semibold text-emerald-800">R$ {{ '%.2f'|format(b.paid_total) }}</div>
+        <div class="mt-1 text-[11px] text-emerald-900/70">Boletos pagos: <b>{{ b.paid_count }}</b></div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
+        <div class="text-xs text-slate-600 dark:text-slate-300">Pendente</div>
+        <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(b.pending_total) }}</div>
+        <div class="mt-1 text-[11px] text-slate-500">Pendentes: <b>{{ b.pending_count }}</b></div>
+      </div>
+      <div class="rounded-2xl border border-rose-200 bg-rose-50/70 p-4">
+        <div class="text-xs text-rose-800">Vencidos (não pagos)</div>
+        <div class="mt-1 text-lg font-semibold text-rose-800">R$ {{ '%.2f'|format(b.overdue_total) }}</div>
+        <div class="mt-1 text-[11px] text-rose-900/70">Vencidos: <b>{{ b.overdue_count }}</b></div>
+      </div>
+    </div>
+
+    <div class="mt-5 flex gap-2">
+      <a href="/boletos?competence={{ competence }}" class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-brandYellow text-brandDark hover:opacity-95 shadow-soft">
+        <i data-lucide="barcode" class="h-4 w-4"></i>
+        Ir para Boletos
+      </a>
+      <a href="/relatorios?end={{ competence }}" class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-white/70 dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white dark:hover:bg-white/15">
+        <i data-lucide="download" class="h-4 w-4"></i>
+        Relatórios
+      </a>
+    </div>
+  </div>
+</div>
+
+{% if b.pending_boletos and b.pending_boletos|length > 0 %}
+  <div class="mt-6 glass rounded-2xl p-6 shadow">
+    <div class="text-sm font-semibold">Boletos pendentes (lista rápida)</div>
+    <div class="mt-2 text-xs text-slate-600 dark:text-slate-300">Use como checklist para cobrança.</div>
+    <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-white">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-slate-500">
+          <tr>
+            <th class="py-3 px-4 text-left">Cliente</th>
+            <th class="py-3 px-4 text-left">Vencimento</th>
+            <th class="py-3 px-4 text-right">Valor</th>
+            <th class="py-3 px-4 text-left">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for boleto in b.pending_boletos[:30] %}
+            <tr class="border-t border-slate-200/70 hover:bg-slate-50/60">
+              <td class="py-3 px-4">
+                <div class="font-medium text-slate-900">{{ boleto.customer_name or '—' }}</div>
+                <div class="text-[11px] text-slate-500">Nosso número: {{ boleto.nosso_numero or '—' }}</div>
+              </td>
+              <td class="py-3 px-4">{{ boleto.due_date.strftime('%d/%m/%Y') if boleto.due_date else '—' }}</td>
+              <td class="py-3 px-4 text-right font-semibold">R$ {{ '%.2f'|format(boleto.amount or 0) }}</td>
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border border-slate-200 bg-slate-50">{{ boleto.status or 'PENDENTE' }}</span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

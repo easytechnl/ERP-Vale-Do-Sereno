@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+{% set title = "Login" %}
+{% set hide_shell = true %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center px-4">
+  <div class="glass w-full max-w-md rounded-2xl p-8 shadow-xl">
+    <div class="text-2xl font-semibold">Acesso</div>
+    <div class="mt-1 text-sm text-slate-600">Entrar no Painel Financeiro ARCVS (MVP) Vale do Sereno.</div>
+
+    <form class="mt-6 grid gap-4" method="post" action="/login">
+      <div>
+        <label class="text-sm font-medium">E-mail</label>
+        <input name="email" type="email" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-violet-300" />
+      </div>
+      <div>
+        <label class="text-sm font-medium">Senha</label>
+        <input name="password" type="password" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-violet-300" />
+      </div>
+      <button class="rounded-xl bg-slate-900 px-4 py-3 text-white hover:bg-slate-800">Entrar</button>
+
+    </form>
+  </div>
+</div>
+{% endblock %}

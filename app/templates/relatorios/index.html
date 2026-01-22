@@ -1,0 +1,144 @@
+{% extends "layout.html" %}
+{% set title = "Relatórios" %}
+{% set page_subtitle = "Relatórios por período (1, 3, 6, 12 meses) com exportação. Se existir extrato importado (OFX) na competência/período, a exportação prioriza o extrato; caso contrário, usa os lançamentos." %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+
+  <div class="glass rounded-2xl p-6 shadow">
+    <div class="text-sm font-semibold">Filtros para exportação (opcional)</div>
+    <div class="mt-1 text-xs text-slate-500">Se deixar em branco, a exportação vem completa.</div>
+
+    <div class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+      <div>
+        <label class="text-slate-600">Competência inicial</label>
+        <input id="expStart" type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="MM/AAAA" />
+      </div>
+      <div>
+        <label class="text-slate-600">Competência final</label>
+        <input id="expEnd" type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="MM/AAAA" value="{{ competence }}" />
+      </div>
+      <div>
+        <label class="text-slate-600">Status</label>
+        <select id="expStatus" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <option value="">Todos</option>
+          <option value="REALIZADO">Realizado</option>
+          <option value="PREVISTO">Previsto</option>
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button id="expApply" type="button" class="w-full rounded-xl bg-slate-900 text-white px-4 py-2 hover:opacity-95">Aplicar nos botões</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Card 1: Relatórios por período -->
+    <div class="glass rounded-2xl p-6 shadow">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="text-sm font-semibold">Relatórios por período</div>
+          <div class="mt-1 text-xs text-slate-600">Consolidação por período (1, 3, 6, 12 meses) com exportação.</div>
+        </div>
+        <a class="text-sm underline" href="/relatorios/periodo?end={{ competence }}&months=6">Abrir</a>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <a class="ripple rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50" href="/relatorios/periodo?end={{ competence }}&months=1">1 mês</a>
+        <a class="ripple rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50" href="/relatorios/periodo?end={{ competence }}&months=3">3 meses</a>
+        <a class="ripple rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50" href="/relatorios/periodo?end={{ competence }}&months=6">6 meses</a>
+        <a class="ripple rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50" href="/relatorios/periodo?end={{ competence }}&months=12">12 meses</a>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+        <form class="grid grid-cols-1 md:grid-cols-3 gap-2" method="get" action="/relatorios/periodo">
+          <div>
+            <label class="text-xs text-slate-600">Mês final</label>
+            <input type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" name="end" value="{{ competence }}" placeholder="MM/AAAA" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-600">Janela</label>
+            <select class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" name="months">
+              <option value="1">1 mês</option>
+              <option value="3">3 meses</option>
+              <option value="6" selected>6 meses</option>
+              <option value="12">12 meses</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button class="w-full rounded-xl bg-slate-900 text-white px-4 py-2 text-sm hover:opacity-95" type="submit">Gerar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Card 2: Exportar Entradas -->
+    <div class="glass rounded-2xl p-6 shadow">
+      <div class="text-sm font-semibold">Exportar relatório de todas as entradas</div>
+      <div class="mt-1 text-xs text-slate-600">Baixe em CSV (Excel) ou PDF.</div>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <a class="ripple rounded-xl bg-brandGreen px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-95" data-export-base="/relatorios/export/entradas.csv" href="/relatorios/export/entradas.csv">Baixar CSV</a>
+        <a class="ripple rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50" data-export-base="/relatorios/export/entradas.pdf" href="/relatorios/export/entradas.pdf">Baixar PDF</a>
+      </div>
+    </div>
+
+    <!-- Card 3: Exportar Saídas -->
+    <div class="glass rounded-2xl p-6 shadow">
+      <div class="text-sm font-semibold">Exportar relatórios de todas as saídas</div>
+      <div class="mt-1 text-xs text-slate-600">Baixe em CSV (Excel) ou PDF.</div>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <a class="ripple rounded-xl bg-brandGreen px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-95" data-export-base="/relatorios/export/saidas.csv" href="/relatorios/export/saidas.csv">Baixar CSV</a>
+        <a class="ripple rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50" data-export-base="/relatorios/export/saidas.pdf" href="/relatorios/export/saidas.pdf">Baixar PDF</a>
+      </div>
+    </div>
+
+    <!-- Card 4: Exportar Completo -->
+    <div class="glass rounded-2xl p-6 shadow">
+      <div class="text-sm font-semibold">Exportar relatório completo</div>
+      <div class="mt-1 text-xs text-slate-600">Entradas + saídas em um único arquivo (CSV ou PDF).</div>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <a class="ripple rounded-xl bg-brandGreen px-4 py-2 text-sm font-semibold text-white shadow-soft hover:opacity-95" data-export-base="/relatorios/export/completo.csv" href="/relatorios/export/completo.csv">Baixar CSV</a>
+        <a class="ripple rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50" data-export-base="/relatorios/export/completo.pdf" href="/relatorios/export/completo.pdf">Baixar PDF</a>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="text-xs text-slate-500">
+    Observação: o PDF de exportação lista uma amostra (até 250 linhas) para manter o arquivo leve. Para todos os registros, use o CSV.
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+  function buildQuery() {
+    const start = document.getElementById('expStart')?.value?.trim();
+    const end = document.getElementById('expEnd')?.value?.trim();
+    const status = document.getElementById('expStatus')?.value?.trim();
+    const params = new URLSearchParams();
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+    if (status) params.set('status', status);
+    const qs = params.toString();
+    return qs ? `?${qs}` : '';
+  }
+
+  function applyExportLinks() {
+    const qs = buildQuery();
+    document.querySelectorAll('[data-export-base]').forEach((a) => {
+      const base = a.getAttribute('data-export-base');
+      if (base) a.setAttribute('href', base + qs);
+    });
+  }
+
+  document.getElementById('expApply')?.addEventListener('click', applyExportLinks);
+  // aplica ao carregar (com end pré-preenchido)
+  applyExportLinks();
+</script>
+{% endblock %}

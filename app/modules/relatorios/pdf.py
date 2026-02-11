@@ -19,6 +19,8 @@ from reportlab.platypus import (
 )
 from reportlab.pdfgen import canvas
 
+from app.core.pdf_branding import header_footer_factory
+
 
 # =========================
 # Helpers (layout + format)
@@ -167,41 +169,7 @@ def _build_styles():
 
 
 def _header_footer(title: str, subtitle: str):
-    def _draw(canv: canvas.Canvas, doc):
-        canv.saveState()
-
-        # Header
-        x0 = doc.leftMargin
-        y_top = PAGE_H - doc.topMargin + 8 * mm
-
-        canv.setFillColor(INK)
-        canv.setFont("Helvetica-Bold", 12)
-        canv.drawString(x0, y_top, title)
-
-        canv.setFillColor(MUTED)
-        canv.setFont("Helvetica", 9)
-        canv.drawString(x0, y_top - 12, subtitle)
-
-        # Linha
-        canv.setStrokeColor(LINE)
-        canv.setLineWidth(0.8)
-        canv.line(x0, y_top - 18, PAGE_W - doc.rightMargin, y_top - 18)
-
-        # Footer
-        canv.setStrokeColor(LINE)
-        canv.setLineWidth(0.8)
-        canv.line(doc.leftMargin, doc.bottomMargin - 6, PAGE_W - doc.rightMargin, doc.bottomMargin - 6)
-
-        canv.setFillColor(MUTED)
-        canv.setFont("Helvetica", 8.5)
-        canv.drawString(doc.leftMargin, doc.bottomMargin - 18, f"Gerado em {_now_str()}")
-
-        page = canv.getPageNumber()
-        canv.drawRightString(PAGE_W - doc.rightMargin, doc.bottomMargin - 18, f"Página {page}")
-
-        canv.restoreState()
-
-    return _draw
+    return header_footer_factory(title=title, subtitle=subtitle)
 
 
 def _kpi_cards(styles, *, entradas: float, saidas: float, saldo: float) -> Table:
@@ -532,5 +500,145 @@ def generate_lancamentos_pdf(
     # nota final
     story.append(Spacer(1, 6))
     story.append(Paragraph("Dica: use o filtro de período no painel para gerar exports mais específicos.", styles["SmallMuted"]))
+
+    doc.build(story, onFirstPage=_header_footer(title, subtitle), onLaterPages=_header_footer(title, subtitle))
+
+
+def generate_boletos_pdf(
+    out_path: Path,
+    *,
+    title: str,
+    subtitle: str,
+    rows: list[dict],
+):
+    """
+    PDF para exportaÃ§Ã£o de boletos (pagos / nÃ£o pagos / a vencer).
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    styles = _build_styles()
+    total = sum(_as_float(r.get("amount")) for r in (rows or []))
+    count = len(rows or [])
+
+    doc = SimpleDocTemplate(
+        str(out_path),
+        pagesize=A4,
+        leftMargin=MARGIN_L,
+        rightMargin=MARGIN_R,
+        topMargin=26 * mm,
+        bottomMargin=18 * mm,
+        title=title,
+        author="ERP Financeiro",
+    )
+
+    story = []
+    story.append(Spacer(1, 6))
+
+    resumo = Table(
+        [[
+            Paragraph("<b>Resumo</b>", styles["BodyX"]),
+            Paragraph(f"Total de boletos: <b>{count}</b> â€¢ Valor total: <b>{_money_br(total)}</b>", styles["BodyX"]),
+        ]],
+        colWidths=[22 * mm, (PAGE_W - MARGIN_L - MARGIN_R) - 22 * mm],
+        hAlign="LEFT",
+    )
+    resumo.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), CARD_BG),
+                ("BOX", (0, 0), (-1, -1), 0.8, LINE),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
+    story.append(resumo)
+    story.append(Spacer(1, 10))
+
+    header = ["Cliente", "Vencimento", "Valor", "Status"]
+    body = []
+    for r in (rows or []):
+        due = r.get("due_date")
+        due_s = due.strftime("%d/%m/%Y") if hasattr(due, "strftime") and due else "â€”"
+        name = str(r.get("customer_name", "") or "â€”")
+        status = str(r.get("status", "") or "").upper().strip() or "PENDENTE"
+        val = _as_float(r.get("amount"))
+        body.append(
+            [
+                Paragraph(name, styles["Cell"]),
+                Paragraph(due_s, styles["CellCenter"]),
+                Paragraph(_money_br(val), styles["CellRight"]),
+                Paragraph(status, styles["CellCenter"]),
+            ]
+        )
+
+    usable_w = PAGE_W - MARGIN_L - MARGIN_R
+    col_widths = [
+        70 * mm,
+        28 * mm,
+        30 * mm,
+        usable_w - (70 + 28 + 30) * mm,
+    ]
+
+    story.append(_build_table(styles, header, body, col_widths))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("ObservaÃ§Ã£o: relatÃ³rio filtrado por competÃªncia.", styles["SmallMuted"]))
+
+    doc.build(story, onFirstPage=_header_footer(title, subtitle), onLaterPages=_header_footer(title, subtitle))
+
+
+def generate_variacao_entradas_pdf(
+    out_path: Path,
+    *,
+    competence: str,
+    prev_competence: str,
+    current_total: float,
+    previous_total: float,
+    delta: float,
+    delta_pct: float | None,
+):
+    """
+    PDF com variaÃ§Ã£o de entradas (mÃªs atual vs anterior).
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    styles = _build_styles()
+
+    title = "VariaÃ§Ã£o de Entradas"
+    subtitle = f"Comparativo: {prev_competence} x {competence}"
+
+    doc = SimpleDocTemplate(
+        str(out_path),
+        pagesize=A4,
+        leftMargin=MARGIN_L,
+        rightMargin=MARGIN_R,
+        topMargin=26 * mm,
+        bottomMargin=18 * mm,
+        title=title,
+        author="ERP Financeiro",
+    )
+
+    story = []
+    story.append(Spacer(1, 6))
+
+    header = ["CompetÃªncia", "Entradas"]
+    rows = [
+        [Paragraph(prev_competence, styles["CellCenter"]), Paragraph(_money_br(previous_total), styles["CellRight"])],
+        [Paragraph(competence, styles["CellCenter"]), Paragraph(_money_br(current_total), styles["CellRight"])],
+    ]
+    if delta_pct is None:
+        delta_txt = _money_br(delta)
+    else:
+        delta_txt = f"{_money_br(delta)} ({delta_pct:.2f}%)"
+    rows.append([Paragraph("VariaÃ§Ã£o", styles["CellCenter"]), Paragraph(delta_txt, styles["CellRight"])])
+
+    usable_w = PAGE_W - MARGIN_L - MARGIN_R
+    col_widths = [40 * mm, usable_w - 40 * mm]
+
+    story.append(_build_table(styles, header, rows, col_widths))
+    story.append(Spacer(1, 6))
+    story.append(Paragraph("ObservaÃ§Ã£o: entradas somadas por extrato OFX + lanÃ§amentos manuais.", styles["SmallMuted"]))
 
     doc.build(story, onFirstPage=_header_footer(title, subtitle), onLaterPages=_header_footer(title, subtitle))

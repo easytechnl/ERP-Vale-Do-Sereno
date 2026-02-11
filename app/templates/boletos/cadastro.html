@@ -1,0 +1,173 @@
+{% extends "layout.html" %}
+{% set title = "Boletos (Cadastro)" %}
+{% set page_subtitle = "Cadastre boletos a pagar e vincule com uma Nota Fiscal." %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="glass rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <div class="text-sm font-semibold text-slate-700">Competência</div>
+        <div class="text-sm text-slate-500">Cadastros manuais (contas a pagar).</div>
+      </div>
+      <form class="grid w-full gap-3 sm:grid-cols-2 lg:w-auto" method="get" action="/boletos/cadastro">
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Competência</label>
+          <input class="input" name="competence" type="month" value="{{ competence }}" />
+        </div>
+        <div class="sm:self-end">
+          <button class="btn btn-secondary ripple w-full">Aplicar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <a href="/boletos/cadastro?competence={{ competence }}&view=all" class="glass rounded-2xl p-4 hover:bg-slate-50">
+      <div class="text-sm text-slate-500">Total</div>
+      <div class="text-xl font-semibold text-slate-900">{{ stats.all_count }}</div>
+    </a>
+    <a href="/boletos/cadastro?competence={{ competence }}&view=paid" class="glass rounded-2xl p-4 hover:bg-slate-50">
+      <div class="text-sm text-slate-500">Pagos</div>
+      <div class="text-xl font-semibold text-emerald-700">R$ {{ "%.2f"|format(stats.paid_total) }}</div>
+      <div class="text-sm text-slate-600">{{ stats.paid_count }} item(ns)</div>
+    </a>
+    <a href="/boletos/cadastro?competence={{ competence }}&view=pending" class="glass rounded-2xl p-4 hover:bg-slate-50">
+      <div class="text-sm text-slate-500">A vencer</div>
+      <div class="text-xl font-semibold text-slate-900">R$ {{ "%.2f"|format(stats.pending_total) }}</div>
+      <div class="text-sm text-slate-600">{{ stats.pending_count }} item(ns)</div>
+    </a>
+    <a href="/boletos/cadastro?competence={{ competence }}&view=overdue" class="glass rounded-2xl p-4 hover:bg-slate-50">
+      <div class="text-sm text-slate-500">Vencidos</div>
+      <div class="text-xl font-semibold text-rose-700">R$ {{ "%.2f"|format(stats.overdue_total) }}</div>
+      <div class="text-sm text-slate-600">{{ stats.overdue_count }} item(ns)</div>
+    </a>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-12">
+    <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-4">
+      <div class="text-lg font-semibold text-slate-900">Cadastrar boleto a pagar</div>
+      <form class="mt-4 space-y-3" method="post" action="/boletos/cadastro/create">
+        <input type="hidden" name="competence" value="{{ competence }}" />
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Beneficiário</label>
+          <input class="input" name="beneficiario" required placeholder="Ex: Concessionária de Energia" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Valor (R$)</label>
+          <input class="input" name="amount" type="number" step="0.01" min="0" required />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Vencimento</label>
+          <input class="input" name="due_date" type="date" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Status</label>
+          <select class="input" name="status">
+            <option value="A_VENCER">A vencer</option>
+            <option value="VENCIDO">Vencido</option>
+            <option value="PAGO">Pago</option>
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Descrição (opcional)</label>
+          <input class="input" name="descricao" placeholder="Ex: Energia elétrica - sede" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Vincular Nota Fiscal (opcional)</label>
+          <select class="input" name="nota_fiscal_id">
+            <option value="">— não vincular —</option>
+            {% for nf in notas %}
+            <option value="{{ nf.id }}">NF {{ nf.numero }} — {{ nf.fornecedor }} (R$ {{ "%.2f"|format(nf.amount) }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Linha digitável / código de barras (opcional)</label>
+          <input class="input" name="digitable_line" placeholder="Linha digitável" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Observações (opcional)</label>
+          <input class="input" name="notes" placeholder="Opcional" />
+        </div>
+
+        <button class="btn btn-primary ripple w-full bg-brandGreen">Adicionar boleto</button>
+      </form>
+    </div>
+
+    <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-8">
+      <div class="mb-4 flex items-center justify-between">
+        <div>
+          <div class="text-lg font-semibold text-slate-900">Boletos cadastrados</div>
+          <div class="text-sm text-slate-500">Visíveis: <b>{{ boletos|length }}</b></div>
+        </div>
+        <a class="text-sm text-brandGreen underline" href="/notas-fiscais?competence={{ competence }}">Ir para Notas Fiscais</a>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="text-left">Boleto</th>
+              <th class="text-left">NF vinculada</th>
+              <th class="text-left">Vencimento</th>
+              <th class="text-left">Valor</th>
+              <th class="text-left">Status</th>
+              <th class="text-left"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for b in boletos %}
+            <tr>
+              <td>
+                <div class="font-medium text-slate-900">{{ b.beneficiario }}</div>
+                <div class="text-xs text-slate-500">{{ b.descricao or "—" }}</div>
+              </td>
+              <td>
+                {% if b.nota_fiscal %}
+                <div>NF {{ b.nota_fiscal.numero }}</div>
+                <div class="text-xs text-slate-500">{{ b.nota_fiscal.fornecedor }}</div>
+                {% else %}
+                —
+                {% endif %}
+              </td>
+              <td>
+                {{ b.due_date.strftime("%d/%m/%Y") if b.due_date else "—" }}
+                {% if b.overdue %}<span class="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">Vencido</span>{% endif %}
+                {% if b.due_soon %}<span class="ml-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Próximo</span>{% endif %}
+              </td>
+              <td class="font-semibold text-slate-900">R$ {{ "%.2f"|format(b.amount) }}</td>
+              <td>
+                <form method="post" action="/boletos/cadastro/{{ b.id }}/status">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <select class="input min-w-[135px]" name="status" onchange="this.form.submit()">
+                    <option value="A_VENCER" {% if b.status == "A_VENCER" %}selected{% endif %}>A vencer</option>
+                    <option value="VENCIDO" {% if b.status == "VENCIDO" %}selected{% endif %}>Vencido</option>
+                    <option value="PAGO" {% if b.status == "PAGO" %}selected{% endif %}>Pago</option>
+                  </select>
+                </form>
+              </td>
+              <td>
+                <form method="post" action="/boletos/cadastro/{{ b.id }}/delete" onsubmit="return confirm('Excluir este boleto?')">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <button class="btn btn-secondary ripple">
+                    <i data-lucide="trash" class="h-4 w-4"></i>
+                    Excluir
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if boletos|length == 0 %}
+            <tr>
+              <td class="py-6 text-center text-sm text-slate-500" colspan="6">Nenhum boleto cadastrado para esta competência.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

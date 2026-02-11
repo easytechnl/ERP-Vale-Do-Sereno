@@ -1,0 +1,205 @@
+{% extends "layout.html" %}
+{% set title = "Notas Fiscais" %}
+{% set page_subtitle = "Cadastre notas fiscais e marque como paga, a vencer ou vencida." %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="glass rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <div class="text-sm font-semibold text-slate-700">Competencia</div>
+        <div class="text-sm text-slate-500">Use o filtro para navegar por mes e acompanhar os totais por status.</div>
+      </div>
+      <form class="grid w-full gap-3 sm:grid-cols-3 lg:w-auto" method="get" action="/notas-fiscais">
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Competencia</label>
+          <input class="input" name="competence" type="month" value="{{ competence }}" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Visualizacao</label>
+          <select class="input" name="view">
+            <option value="all" {% if view == "all" %}selected{% endif %}>Todas</option>
+            <option value="pending" {% if view == "pending" %}selected{% endif %}>A vencer / pendentes</option>
+            <option value="due_soon" {% if view == "due_soon" %}selected{% endif %}>Proximas do vencimento</option>
+            <option value="overdue" {% if view == "overdue" %}selected{% endif %}>Vencidas</option>
+            <option value="paid" {% if view == "paid" %}selected{% endif %}>Pagas</option>
+          </select>
+        </div>
+        <div class="sm:self-end">
+          <button class="btn btn-secondary ripple w-full">Aplicar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="glass rounded-2xl p-4">
+      <div class="text-sm text-slate-500">Total (todas)</div>
+      <div class="text-xl font-semibold text-slate-900">R$ {{ "%.2f"|format(stats.pending_total + stats.paid_total) }}</div>
+      <div class="text-sm text-slate-600">Itens: <b>{{ stats.all_count }}</b></div>
+    </div>
+    <div class="glass rounded-2xl p-4">
+      <div class="text-sm text-slate-500">Pagas</div>
+      <div class="text-xl font-semibold text-slate-900">R$ {{ "%.2f"|format(stats.paid_total) }}</div>
+      <div class="text-sm text-slate-600">Itens: <b>{{ stats.paid_count }}</b></div>
+    </div>
+    <div class="glass rounded-2xl p-4">
+      <div class="text-sm text-slate-500">Pendentes</div>
+      <div class="text-xl font-semibold text-slate-900">R$ {{ "%.2f"|format(stats.pending_total) }}</div>
+      <div class="text-sm text-slate-600">Itens: <b>{{ stats.pending_count }}</b></div>
+    </div>
+    <div class="glass rounded-2xl p-4">
+      <div class="text-sm text-slate-500">Vencidas</div>
+      <div class="text-xl font-semibold text-slate-900">R$ {{ "%.2f"|format(stats.overdue_total) }}</div>
+      <div class="text-sm text-slate-600">Itens: <b>{{ stats.overdue_count }}</b></div>
+    </div>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-12">
+    <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-4">
+      <div class="text-lg font-semibold text-slate-900">Cadastrar nota fiscal</div>
+      <div class="mt-1 text-sm text-slate-500">Registre a NF e marque o status.</div>
+
+      <form class="mt-4 space-y-3" method="post" action="/notas-fiscais/create">
+        <input type="hidden" name="competence" value="{{ competence }}" />
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Numero</label>
+          <input class="input" name="numero" required placeholder="Ex: 000123" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Construtora (opcional)</label>
+          <select class="input" id="construtoraNfSelect">
+            <option value="">-- selecionar construtora --</option>
+            {% for c in companies %}
+            <option value="{{ c.id }}" data-name="{{ c.name }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="mt-1 text-xs text-slate-500">Se selecionar, o fornecedor sera preenchido automaticamente.</div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Fornecedor (opcional)</label>
+          <input class="input" name="fornecedor" id="fornecedorInput" placeholder="Ex: Energia / Prestador" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Descricao (opcional)</label>
+          <input class="input" name="descricao" placeholder="Ex: Servicos - competencia do mes" />
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Emissao</label>
+            <input class="input" name="issue_date" type="date" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-medium text-slate-600">Vencimento</label>
+            <input class="input" name="due_date" type="date" />
+          </div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Valor (R$)</label>
+          <input class="input" name="amount" type="number" step="0.01" min="0" required />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Status</label>
+          <select class="input" name="status">
+            <option value="A_VENCER">A vencer</option>
+            <option value="VENCIDA">Vencida</option>
+            <option value="PAGA">Paga</option>
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Observacoes (opcional)</label>
+          <input class="input" name="notes" placeholder="Opcional" />
+        </div>
+
+        <button class="btn btn-primary ripple w-full bg-brandGreen">Cadastrar nota fiscal</button>
+      </form>
+    </div>
+
+    <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-8">
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div class="text-lg font-semibold text-slate-900">Notas na competencia</div>
+          <div class="text-sm text-slate-500">Marque status rapidamente e acompanhe vencimentos.</div>
+        </div>
+        <div class="flex items-center gap-3">
+          <a class="btn btn-secondary ripple" href="/notas-fiscais/export/pdf">
+            <i data-lucide="download" class="h-4 w-4"></i>
+            Exportar PDF (todas)
+          </a>
+          <div class="text-sm text-slate-600">Visiveis: <b>{{ notas|length }}</b></div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="text-left">NF</th>
+              <th class="text-left">Fornecedor</th>
+              <th class="text-left">Vencimento</th>
+              <th class="text-left">Valor</th>
+              <th class="text-left">Status</th>
+              <th class="text-left"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for n in notas %}
+            <tr>
+              <td>
+                <div class="font-medium text-slate-900">{{ n.numero }}</div>
+                {% if n.descricao %}<div class="text-xs text-slate-500">{{ n.descricao }}</div>{% endif %}
+              </td>
+              <td>{{ n.fornecedor or "-" }}</td>
+              <td>
+                {% if n.due_date %}{{ n.due_date.strftime("%d/%m/%Y") }}{% else %}-{% endif %}
+                {% if n.overdue %}<span class="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">VENCIDA</span>{% endif %}
+                {% if n.due_soon %}<span class="ml-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">VENCE EM BREVE</span>{% endif %}
+              </td>
+              <td class="font-semibold text-slate-900">R$ {{ "%.2f"|format(n.amount) }}</td>
+              <td>
+                <form class="flex items-center gap-2" method="post" action="/notas-fiscais/{{ n.id }}/status">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <select class="input min-w-[140px]" name="status">
+                    <option value="A_VENCER" {% if n.status == "A_VENCER" %}selected{% endif %}>A vencer</option>
+                    <option value="VENCIDA" {% if n.status == "VENCIDA" %}selected{% endif %}>Vencida</option>
+                    <option value="PAGA" {% if n.status == "PAGA" %}selected{% endif %}>Paga</option>
+                  </select>
+                  <button class="btn btn-secondary ripple">Salvar</button>
+                </form>
+              </td>
+              <td>
+                <form method="post" action="/notas-fiscais/{{ n.id }}/delete" onsubmit="return confirm('Excluir esta nota fiscal?')">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <button class="btn btn-secondary ripple">
+                    <i data-lucide="trash" class="h-4 w-4"></i>
+                    Excluir
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if notas|length == 0 %}
+            <tr>
+              <td class="py-6 text-center text-sm text-slate-500" colspan="6">Nenhuma nota fiscal encontrada para esta competencia.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const sel = document.getElementById('construtoraNfSelect');
+    const fornecedor = document.getElementById('fornecedorInput');
+    if (!sel || !fornecedor) return;
+    sel.addEventListener('change', () => {
+      const opt = sel.options[sel.selectedIndex];
+      const name = (opt?.dataset?.name || '').trim();
+      if (name && !fornecedor.value.trim()) fornecedor.value = name;
+    });
+  })();
+</script>
+{% endblock %}

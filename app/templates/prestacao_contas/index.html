@@ -7,13 +7,15 @@
 {% set prev = data.previous %}
 {% set delta = data.delta %}
 {% set b = data.boletos %}
+{% set bpr = data.boletos_pagar %}
+{% set brc = data.boletos_receber_cadastro %}
 
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-  <div class="glass rounded-2xl p-6 shadow xl:col-span-2">
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+  <div class="glass p-7 xl:col-span-2">
     <div class="flex items-start justify-between gap-4">
       <div>
         <div class="text-sm font-semibold">Variação do mês</div>
-        <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">
+        <div class="mt-1 text-xs text-slate-500">
           Comparação entre <b>{{ prev.competence }}</b> e <b>{{ cur.competence|competence_br }}</b> (com base no extrato OFX importado + lançamentos manuais).
         </div>
       </div>
@@ -22,19 +24,19 @@
       </div>
     </div>
 
-    <div class="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Entrou ({{ cur.competence|competence_br }})</div>
+    <div class="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5">
+        <div class="text-xs text-slate-500">Entrou ({{ cur.competence|competence_br }})</div>
         <div class="mt-1 text-lg font-semibold text-emerald-700 dark:text-emerald-300">R$ {{ '%.2f'|format(cur.entradas) }}</div>
         <div class="mt-1 text-xs text-slate-500">Δ {{ '%.2f'|format(delta.entradas) }}</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Saiu ({{ cur.competence|competence_br }})</div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-5">
+        <div class="text-xs text-slate-500">Saiu ({{ cur.competence|competence_br }})</div>
         <div class="mt-1 text-lg font-semibold text-rose-700 dark:text-rose-300">R$ {{ '%.2f'|format(cur.saidas) }}</div>
         <div class="mt-1 text-xs text-slate-500">Δ {{ '%.2f'|format(delta.saidas) }}</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Saldo final (com ajuste)</div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-5">
+        <div class="text-xs text-slate-500">Saldo final (com ajuste)</div>
         <div class="mt-1 text-lg font-semibold text-brandGreen">R$ {{ '%.2f'|format(cur.saldo) }}</div>
         <div class="mt-1 text-xs text-slate-500">Δ {{ '%.2f'|format(delta.saldo) }}{% if data.saldo_var_pct is not none %} • {{ '%.2f'|format(data.saldo_var_pct) }}%{% endif %}</div>
         <div class="mt-2 text-[11px] text-slate-500">Ajuste manual: <b>R$ {{ '%.2f'|format(cur.saldo_adjustment) }}</b> (Δ {{ '%.2f'|format(delta.saldo_adjustment) }})</div>
@@ -42,16 +44,16 @@
     </div>
 
     
-    <div class="mt-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/10 p-4">
+    <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
       <div class="flex items-center justify-between gap-3">
         <div class="text-sm font-semibold">Entradas x Saídas x Saldo (últimos 6 meses)</div>
         <div class="text-xs text-slate-500">Fonte: extratos OFX importados + lançamentos manuais + ajuste manual</div>
       </div>
-      <div class="mt-3">
-        <canvas id="flowChart" height="110"></canvas>
+      <div class="mt-4 min-h-[240px]">
+        <canvas id="flowChart" height="140"></canvas>
       </div>
 
-      <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-white">
+      <div class="mt-6 overflow-auto rounded-2xl border border-slate-200 bg-white">
         <table class="w-full text-sm">
           <thead class="bg-slate-50 text-slate-500">
             <tr>
@@ -88,15 +90,53 @@
         const saldo = {{ data.series.saldo|tojson }};
         const ctx = document.getElementById('flowChart');
         if (!ctx || !window.Chart) return;
+
+        const formatBRL = (v) => `R$ ${Number(v||0).toFixed(2)}`;
+        const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 180);
+        gradient.addColorStop(0, 'rgba(16,185,129,.35)');
+        gradient.addColorStop(1, 'rgba(16,185,129,0)');
+
         new Chart(ctx, {
-          type: 'line',
+          type: 'bar',
           data: {
             labels: labels.map(l => (l || '').slice(0,7)),
             datasets: [
-              { label: 'Entradas', data: entradas, tension: 0.25 },
-              { label: 'Saídas', data: saidas, tension: 0.25 },
-              { label: 'Ajuste manual', data: ajustes, type: 'bar' },
-              { label: 'Saldo final', data: saldo, tension: 0.25 },
+              {
+                label: 'Entradas',
+                data: entradas,
+                backgroundColor: 'rgba(16,185,129,.45)',
+                borderColor: 'rgba(16,185,129,1)',
+                borderWidth: 1.5,
+                borderRadius: 8
+              },
+              {
+                label: 'Saídas',
+                data: saidas,
+                backgroundColor: 'rgba(244,63,94,.35)',
+                borderColor: 'rgba(244,63,94,1)',
+                borderWidth: 1.5,
+                borderRadius: 8
+              },
+              {
+                label: 'Ajuste manual',
+                data: ajustes,
+                type: 'bar',
+                backgroundColor: 'rgba(56,189,248,.35)',
+                borderColor: 'rgba(56,189,248,1)',
+                borderWidth: 1.2,
+                borderRadius: 8
+              },
+              {
+                label: 'Saldo final',
+                data: saldo,
+                type: 'line',
+                tension: 0.35,
+                borderColor: 'rgba(16,185,129,1)',
+                backgroundColor: gradient,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 5
+              }
             ]
           },
           options: {
@@ -105,9 +145,14 @@
             interaction: { mode: 'index', intersect: false },
             plugins: {
               legend: { display: true, position: 'bottom' },
-              tooltip: { callbacks: { label: (ctx)=> `${ctx.dataset.label}: R$ ${Number(ctx.parsed.y||0).toFixed(2)}` } }
+              tooltip: {
+                callbacks: {
+                  label: (ctx)=> `${ctx.dataset.label}: ${formatBRL(ctx.parsed.y)}`
+                }
+              }
             },
             scales: {
+              x: { grid: { display: false } },
               y: { ticks: { callback: (v)=> `R$ ${v}` } }
             }
           }
@@ -122,78 +167,110 @@
     {% endif %}
   </div>
 
-  <div class="glass rounded-2xl p-6 shadow">
-    <div class="text-sm font-semibold">Boletos do mês</div>
-    <div class="mt-1 text-xs text-slate-600 dark:text-slate-300">O que <b>deve entrar</b> com base nas parcelas/boletos da competência.</div>
+</div>
 
-    <div class="mt-5 space-y-3">
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Total esperado</div>
-        <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(b.expected) }}</div>
-        <div class="mt-1 text-[11px] text-slate-500">Parcelas: <b>{{ b.installments_count }}</b></div>
+<div class="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+  <div class="glass p-7">
+    <div class="text-sm font-semibold">Boletos a pagar (despesas)</div>
+    <div class="mt-1 text-xs text-slate-500">Resumo dos boletos de saída cadastrados manualmente.</div>
+    <div class="mt-4 grid grid-cols-2 gap-3">
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Pagos</div>
+        <div class="mt-1 text-lg font-semibold text-emerald-700">R$ {{ '%.2f'|format(bpr.paid_total) }}</div>
+        <div class="mt-1 text-[11px] text-slate-500">Itens: <b>{{ bpr.paid_count }}</b></div>
       </div>
-      <div class="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-        <div class="text-xs text-emerald-800">Pago</div>
-        <div class="mt-1 text-lg font-semibold text-emerald-800">R$ {{ '%.2f'|format(b.paid_total) }}</div>
-        <div class="mt-1 text-[11px] text-emerald-900/70">Boletos pagos: <b>{{ b.paid_count }}</b></div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">A vencer</div>
+        <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(bpr.pending_total - bpr.overdue_total) }}</div>
+        <div class="mt-1 text-[11px] text-slate-500">Itens: <b>{{ bpr.pending_count - bpr.overdue_count }}</b></div>
       </div>
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Pendente</div>
-        <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(b.pending_total) }}</div>
-        <div class="mt-1 text-[11px] text-slate-500">Pendentes: <b>{{ b.pending_count }}</b></div>
-      </div>
-      <div class="rounded-2xl border border-rose-200 bg-rose-50/70 p-4">
-        <div class="text-xs text-rose-800">Vencidos (não pagos)</div>
-        <div class="mt-1 text-lg font-semibold text-rose-800">R$ {{ '%.2f'|format(b.overdue_total) }}</div>
-        <div class="mt-1 text-[11px] text-rose-900/70">Vencidos: <b>{{ b.overdue_count }}</b></div>
+      <div class="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 col-span-2">
+        <div class="text-xs text-rose-800">Vencidos</div>
+        <div class="mt-1 text-lg font-semibold text-rose-800">R$ {{ '%.2f'|format(bpr.overdue_total) }}</div>
+        <div class="mt-1 text-[11px] text-rose-900/70">Itens: <b>{{ bpr.overdue_count }}</b></div>
       </div>
     </div>
-
-    <div class="mt-5 flex gap-2">
-      <a href="/boletos?competence={{ competence }}" class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-brandYellow text-brandDark hover:opacity-95 shadow-soft">
-        <i data-lucide="barcode" class="h-4 w-4"></i>
-        Ir para Boletos
+    <div class="mt-4">
+      <a href="/boletos/cadastro?competence={{ competence }}" class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-white border border-black/10 border-slate-200 hover:bg-slate-50">
+        <i data-lucide="file-plus-2" class="h-4 w-4"></i>
+        Abrir boletos a pagar
       </a>
-      <a href="/relatorios?end={{ competence }}" class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-white/70 dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white dark:hover:bg-white/15">
-        <i data-lucide="download" class="h-4 w-4"></i>
-        Relatórios
+    </div>
+  </div>
+
+  <div class="glass p-7">
+    <div class="text-sm font-semibold">Boletos a receber (cadastro manual)</div>
+    <div class="mt-1 text-xs text-slate-500">Resumo dos boletos de entrada cadastrados manualmente.</div>
+    <div class="mt-4 grid grid-cols-2 gap-3">
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Pagos</div>
+        <div class="mt-1 text-lg font-semibold text-emerald-700">R$ {{ '%.2f'|format(brc.paid_total) }}</div>
+        <div class="mt-1 text-[11px] text-slate-500">Itens: <b>{{ brc.paid_count }}</b></div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">A vencer</div>
+        <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(brc.pending_total - brc.overdue_total) }}</div>
+        <div class="mt-1 text-[11px] text-slate-500">Itens: <b>{{ brc.pending_count - brc.overdue_count }}</b></div>
+      </div>
+      <div class="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 col-span-2">
+        <div class="text-xs text-rose-800">Vencidos</div>
+        <div class="mt-1 text-lg font-semibold text-rose-800">R$ {{ '%.2f'|format(brc.overdue_total) }}</div>
+        <div class="mt-1 text-[11px] text-rose-900/70">Itens: <b>{{ brc.overdue_count }}</b></div>
+      </div>
+    </div>
+    <div class="mt-4">
+      <a href="/boletos/receber-cadastro?competence={{ competence }}" class="ripple inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold bg-white border border-black/10 border-slate-200 hover:bg-slate-50">
+        <i data-lucide="hand-coins" class="h-4 w-4"></i>
+        Abrir boletos a receber
       </a>
     </div>
   </div>
 </div>
 
-{% if b.pending_boletos and b.pending_boletos|length > 0 %}
-  <div class="mt-6 glass rounded-2xl p-6 shadow">
-    <div class="text-sm font-semibold">Boletos pendentes (lista rápida)</div>
-    <div class="mt-2 text-xs text-slate-600 dark:text-slate-300">Use como checklist para cobrança.</div>
-    <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-white">
-      <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-slate-500">
-          <tr>
-            <th class="py-3 px-4 text-left">Cliente</th>
-            <th class="py-3 px-4 text-left">Vencimento</th>
-            <th class="py-3 px-4 text-right">Valor</th>
-            <th class="py-3 px-4 text-left">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for boleto in b.pending_boletos[:30] %}
-            <tr class="border-t border-slate-200/70 hover:bg-slate-50/60">
-              <td class="py-3 px-4">
-                <div class="font-medium text-slate-900">{{ boleto.customer_name or '—' }}</div>
-                <div class="text-[11px] text-slate-500">Nosso número: {{ boleto.nosso_numero or '—' }}</div>
-              </td>
-              <td class="py-3 px-4">{{ boleto.due_date.strftime('%d/%m/%Y') if boleto.due_date else '—' }}</td>
-              <td class="py-3 px-4 text-right font-semibold">R$ {{ '%.2f'|format(boleto.amount or 0) }}</td>
-              <td class="py-3 px-4">
-                <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border border-slate-200 bg-slate-50">{{ boleto.status or 'PENDENTE' }}</span>
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+<div class="mt-6 glass p-7">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <div class="text-sm font-semibold">Boletos previstos (nÃ£o pagos)</div>
+      <div class="mt-1 text-xs text-slate-500">Lista de boletos emitidos que ainda nÃ£o foram pagos na competÃªncia.</div>
+    </div>
+    <div class="text-xs text-slate-500 text-right">
+      Total: <b>R$ {{ '%.2f'|format(b.pending_total) }}</b><br />
+      Itens: <b>{{ b.pending_count }}</b>
     </div>
   </div>
-{% endif %}
+
+  <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 bg-white">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-slate-500">
+        <tr>
+          <th class="py-2.5 px-3 text-left">Cliente</th>
+          <th class="py-2.5 px-3 text-left">E-mail</th>
+          <th class="py-2.5 px-3 text-center">Vencimento</th>
+          <th class="py-2.5 px-3 text-right">Valor</th>
+          <th class="py-2.5 px-3 text-left">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if b.pending_boletos|length == 0 %}
+          <tr>
+            <td class="py-4 px-3 text-center text-slate-500" colspan="5">Nenhum boleto pendente.</td>
+          </tr>
+        {% else %}
+          {% for row in b.pending_boletos %}
+            <tr class="border-t border-slate-200/70 hover:bg-slate-50/60">
+              <td class="py-2.5 px-3 font-medium text-slate-900">{{ row.customer_name }}</td>
+              <td class="py-2.5 px-3 text-slate-600">{{ row.customer_email or 'â€”' }}</td>
+              <td class="py-2.5 px-3 text-center text-slate-700">
+                {% if row.due_date %}{{ row.due_date.strftime('%d/%m/%Y') }}{% else %}â€”{% endif %}
+              </td>
+              <td class="py-2.5 px-3 text-right font-semibold">R$ {{ '%.2f'|format(row.amount) }}</td>
+              <td class="py-2.5 px-3 text-slate-600">{{ row.status or 'PENDENTE' }}</td>
+            </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
 
 {% endblock %}

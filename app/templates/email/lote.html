@@ -1,20 +1,65 @@
 {% extends "layout.html" %}
 {% set title = "E-mail em lote" %}
-{% set page_subtitle = "Envio em lote com templates, anexos e logs." %}
+{% set page_subtitle = "Envio em lote para clientes em atraso (vencidos e não pagos)." %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.tailwindcss.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/dataTables.tailwindcss.min.js"></script>
+  <style>
+    .dataTables_wrapper .dataTables_filter input {
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 0.75rem !important;
+      padding: 0.45rem 0.7rem !important;
+      background: #fff !important;
+      color: #0f172a !important;
+    }
+    .dataTables_wrapper .dataTables_length select {
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 0.75rem !important;
+      padding: 0.35rem 1.8rem 0.35rem 0.65rem !important;
+      background: #fff !important;
+      color: #0f172a !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+      border-radius: 0.6rem !important;
+      border: 1px solid #e2e8f0 !important;
+      background: #fff !important;
+      color: #334155 !important;
+      padding: 0.28rem 0.62rem !important;
+      margin-left: 0.25rem !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+      background: #059669 !important;
+      color: #fff !important;
+      border-color: #059669 !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+      background: #ecfdf3 !important;
+      color: #047857 !important;
+      border-color: #86efac !important;
+    }
+  </style>
+{% endblock %}
 
 {% block content %}
 <div class="flex items-start justify-between gap-6">
   <div>
-    <div class="text-2xl font-semibold">Envio de boletos por e-mail (lote)</div>
+    <div class="text-2xl font-semibold">Cobrança por e-mail (clientes em atraso)</div>
     <div class="text-sm text-slate-600">Competência: <b>{{ competence|competence_br }}</b></div>
   </div>
 
-  <div class="glass rounded-2xl p-5 shadow w-full max-w-2xl">
+  <div class="glass p-6 w-full max-w-2xl">
     <div class="text-sm font-semibold">Ações</div>
     <div class="mt-3 flex flex-wrap gap-2">
-      <button id="btnEnviar" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white hover:bg-slate-800">Enviar lote (SMTP)</button>
+      <button id="btnEnviar" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white hover:bg-slate-800">Enviar cobrança de atrasados</button>
+      <button id="btnLembretes" class="rounded-xl bg-brandGreen px-4 py-2.5 text-sm text-white hover:opacity-95">Rodar lembretes (10/5/3/1 dias)</button>
       <div class="text-xs text-slate-500 self-center">
-        Configure SMTP no <code>.env</code>. Se SMTP_USER estiver vazio, tentará envio sem auth.
+        Envia somente boletos vencidos e não pagos da competência selecionada.
+      </div>
+      <div class="text-xs text-slate-500 basis-full">
+        Para envio automático, ative em Configurações > Preferências gerais: "Enviar lembretes automáticos (10, 5, 3 e 1 dia antes do vencimento)".
       </div>
     </div>
     <div id="res" class="mt-3 text-sm text-slate-700"></div>
@@ -22,25 +67,26 @@
 </div>
 
 <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-  <div class="glass rounded-2xl p-6 shadow">
-    <div class="text-sm font-semibold">Batches</div>
+  <div class="glass p-7">
+    <div class="text-sm font-semibold">Histórico de envios</div>
+    <div class="mt-1 text-xs text-slate-500">Aqui aparecem as tentativas de envio de e-mail que já foram feitas.</div>
     <div class="mt-3 space-y-2 text-sm">
       {% for b in batches %}
         <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
-          <div class="font-semibold">#{{ b.id }} — {{ b.status }}</div>
+          <div class="font-semibold">Envio #{{ b.id }} — {{ b.status }}</div>
           <div class="text-xs text-slate-600">{{ b.created_at }}</div>
         </div>
       {% endfor %}
       {% if batches|length == 0 %}
-        <div class="text-slate-600">Nenhum batch ainda.</div>
+        <div class="text-slate-600">Você ainda não fez nenhum envio. Clique em "Enviar cobrança de atrasados" ou "Rodar lembretes".</div>
       {% endif %}
     </div>
   </div>
 
-  <div class="glass rounded-2xl p-6 shadow lg:col-span-2">
+  <div class="glass p-7 lg:col-span-2">
     <div class="text-sm font-semibold">Últimas mensagens (até 50)</div>
     <div class="mt-4 overflow-auto">
-      <table class="w-full text-sm">
+      <table id="messagesTable" class="w-full text-sm">
         <thead class="text-left text-slate-500">
           <tr>
             <th class="py-2">Para</th>
@@ -59,11 +105,56 @@
           </tr>
           {% endfor %}
           {% if messages|length == 0 %}
-          <tr><td class="py-3 text-slate-600" colspan="4">Nenhuma mensagem enviada ainda.</td></tr>
+          <tr class="border-t border-slate-200/70">
+            <td class="py-3 text-slate-600">Nenhuma mensagem enviada ainda.</td>
+            <td class="py-3"></td>
+            <td class="py-3"></td>
+            <td class="py-3"></td>
+          </tr>
           {% endif %}
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+
+<div class="mt-6 glass p-7">
+  <div class="text-sm font-semibold">E-mails das construtoras</div>
+  <div class="mt-1 text-xs text-slate-500">Cadastre o e-mail de cada construtora para comunicação rápida.</div>
+  <div class="mt-4 overflow-auto">
+    <table id="companiesTable" class="w-full text-sm">
+      <thead class="text-left text-slate-500">
+        <tr>
+          <th class="py-2">Construtora</th>
+          <th class="py-2">E-mail</th>
+          <th class="py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in companies %}
+        <tr class="border-t border-slate-200/70">
+          <td class="py-2 font-medium">{{ c.name }}</td>
+          <td class="py-2">
+            <form class="flex items-center gap-2" method="post" action="/email/construtoras/{{ c.id }}/email">
+              <input type="hidden" name="competence" value="{{ competence }}" />
+              <input class="input h-9 min-w-[280px]" name="email" type="email" value="{{ c.email }}" placeholder="exemplo@construtora.com" />
+              <button class="btn btn-secondary ripple !px-3 !py-1.5 !text-xs">Salvar</button>
+            </form>
+          </td>
+          <td class="py-2 text-xs">
+            {% if c.email %}
+            <span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">Cadastrado</span>
+            {% else %}
+            <span class="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700">Sem e-mail</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if companies|length == 0 %}
+        <tr><td class="py-3 text-slate-600" colspan="3">Nenhuma construtora encontrada.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -72,11 +163,65 @@
   document.getElementById("btnEnviar").addEventListener("click", async () => {
     try {
       const res = await postJSON(`/email/api/${competence}/enviar-lote`);
-      document.getElementById("res").innerText = `Batch #${res.batch_id} | enviados=${res.sent} | falhas=${res.failed} | total=${res.total}`;
+      document.getElementById("res").innerText = `Batch #${res.batch_id} | enviados=${res.sent} | falhas=${res.failed} | atrasados encontrados=${res.total}`;
       toast("Envio processado. Recarregando...", "ok");
       setTimeout(() => location.reload(), 800);
     } catch (e) {
       toast(e.message, "erro");
+    }
+  });
+
+  document.getElementById("btnLembretes").addEventListener("click", async () => {
+    try {
+      const res = await postJSON(`/email/api/reminders/run-now`);
+      document.getElementById("res").innerText = `Lembretes | batch #${res.batch_id} | enviados=${res.sent} | falhas=${res.failed} | candidatos=${res.candidates}`;
+      toast("Lembretes processados. Recarregando...", "ok");
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      toast(e.message, "erro");
+    }
+  });
+
+  // DataTables (mensagens e construtoras)
+  $(function () {
+    const lang = {
+      decimal: ",",
+      thousands: ".",
+      emptyTable: "Nenhum registro encontrado",
+      info: "Mostrando _START_ até _END_ de _TOTAL_ registros",
+      infoEmpty: "Mostrando 0 até 0 de 0 registros",
+      infoFiltered: "(filtrado de _MAX_ registros no total)",
+      lengthMenu: "Mostrar _MENU_ registros",
+      loadingRecords: "Carregando...",
+      processing: "Processando...",
+      search: "Buscar:",
+      zeroRecords: "Nenhum registro encontrado",
+      paginate: {
+        first: "Primeiro",
+        last: "Último",
+        next: "Próximo",
+        previous: "Anterior"
+      }
+    };
+
+    if ($("#companiesTable").length) {
+      $("#companiesTable").DataTable({
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        order: [[0, "asc"]],
+        language: lang,
+        autoWidth: false
+      });
+    }
+
+    if ($("#messagesTable").length) {
+      $("#messagesTable").DataTable({
+        pageLength: 10,
+        lengthMenu: [10, 25, 50],
+        order: [[0, "asc"]],
+        language: lang,
+        autoWidth: false
+      });
     }
   });
 </script>

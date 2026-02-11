@@ -20,5 +20,13 @@ class Settings(BaseSettings):
     SMTP_PASS: str = Field(default="")
     SMTP_FROM: str = Field(default="financeiro@empresa.com")
     SMTP_TLS: bool = Field(default=True)
+    EMAIL_REMINDER_INTERVAL_MINUTES: int = Field(default=60)
+    EMAIL_REMINDER_STARTUP_DELAY_SECONDS: int = Field(default=20)
+
+    # PostgreSQL tools (optional)
+    PG_BIN: str = Field(default="")
+    PG_DUMP_PATH: str = Field(default="")
+    PG_RESTORE_PATH: str = Field(default="")
+    PG_PSQL_PATH: str = Field(default="")
 
 settings = Settings()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from .service import (
     compute_company_breakdown,
 )
 from .pdf import generate_company_cost_division_pdf_bytes
+from .pdf_summary import generate_rateio_summary_pdf_bytes
 
 
 router = APIRouter(tags=["divisao_custos"])
@@ -209,6 +211,51 @@ def construtoras_create(
     return _redirect_back(competence)
 
 
+@router.post("/divisao-custos/construtoras/{company_id}/update")
+def construtoras_update(
+    company_id: int,
+    competence: str = Form(...),
+    name: str = Form(""),
+    legal_name: str = Form(""),
+    cnpj: str = Form(""),
+    percentual: str = Form(""),
+    notes: str = Form(""),
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    """Permite editar o percentual (e opcionalmente dados básicos) de uma construtora."""
+
+    c = db.query(RateioCompany).get(company_id)
+    if not c:
+        return _redirect_back(competence)
+
+    # Atualiza campos opcionais (se vierem preenchidos)
+    if (name or "").strip():
+        c.name = name.strip()
+    if (legal_name or "").strip():
+        c.legal_name = legal_name.strip() or None
+    if (cnpj or "").strip():
+        c.cnpj = cnpj.strip() or None
+    if (notes or "").strip() or notes == "":
+        c.notes = notes.strip() or None
+
+    # Percentual: aceita 0,12 / 0.12 / 12 / 12% (salva sempre como FRAÇÃO)
+    if (percentual or "").strip():
+        raw = percentual.strip().replace(" ", "")
+        raw = raw.replace("%", "")
+        raw = raw.replace(",", ".")
+        try:
+            pct_val = float(raw)
+            if pct_val > 1:
+                pct_val = pct_val / 100.0
+            c.percentual = float(pct_val)
+        except Exception:
+            pass
+
+    db.commit()
+    return _redirect_back(competence)
+
+
 @router.post("/divisao-custos/construtoras/{company_id}/delete")
 def construtoras_delete(
     company_id: int,
@@ -223,6 +270,23 @@ def construtoras_delete(
     return _redirect_back(competence)
 
 
+@router.get("/divisao-custos/pdf/resumo")
+def rateio_summary_pdf(
+    competence: str,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    """PDF resumo do rateio do m?s (quanto cada construtora deve pagar)."""
+    data = compute_divisao_custos(db, competence)
+    pdf_bytes = generate_rateio_summary_pdf_bytes(data)
+    filename = f"rateio_resumo_{competence}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @router.get("/divisao-custos/pdf/{company_id}")
 def company_pdf(
     company_id: int,
@@ -230,11 +294,11 @@ def company_pdf(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    """Gera o PDF individual (demonstração de custos) de uma construtora."""
+    """Gera o PDF individual (demonstra??o de custos) de uma construtora."""
 
     import io
 
-    # garante sync (caso suba versão nova do DOCX)
+    # garante sync (caso suba vers?o nova do DOCX)
     docx_path = get_percentual_docx_path()
     if docx_path.exists():
         ensure_companies_seeded_from_docx(db, docx_path)
@@ -248,13 +312,13 @@ def company_pdf(
     breakdown = data["breakdown"]
 
     pdf_bytes = generate_company_cost_division_pdf_bytes(
-        association_name="Associação Vale do Sereno",
+        association_name="Associa??o Vale do Sereno",
         competence=competence,
         total_despesas=float(preview.get("total_despesas") or 0.0),
         despesas_breakdown=breakdown,
         company=company,
         total_company=float(data.get("total_company") or 0.0),
-        footer_brand="Desenvolvido EasyTech — Facilitando a tecnologia",
+        footer_brand="Desenvolvido EasyTech ? Facilitando a tecnologia",
     )
 
     filename = f"divisao_custos_{competence}_{company.get('name','construtora')}.pdf".replace(" ", "_")

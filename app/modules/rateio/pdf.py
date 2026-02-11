@@ -14,6 +14,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_RIGHT
 
+from app.core.pdf_branding import draw_logo
+
 
 BRAND_GREEN = colors.HexColor("#08843b")
 BRAND_DARK = colors.HexColor("#0B1220")
@@ -99,6 +101,7 @@ def generate_company_cost_division_pdf_bytes(
         canv.setFont("Helvetica", 10)
         canv.setFillColor(colors.HexColor("#d1d5db"))
         canv.drawString(18 * mm, h - 24.5 * mm, association_name)
+        draw_logo(canv, x=w - 86 * mm, y=h - 22 * mm, max_w=68 * mm, max_h=18 * mm)
 
         # chip competência
         chip_w, chip_h = 56 * mm, 10 * mm

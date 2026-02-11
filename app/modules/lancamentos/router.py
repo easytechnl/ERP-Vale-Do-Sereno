@@ -9,7 +9,6 @@ from app.core.deps import get_db
 from app.core.templating import templates
 from app.core.utils import normalize_competence
 from app.modules.auth.utils import require_login
-from app.models.bancos import BankAccount
 from app.models.customer import Customer
 from app.modules.lancamentos.service import list_entries, create_entry, delete_entry
 
@@ -23,7 +22,7 @@ def lancamentos_page(
     competence: str | None = None,
     kind: str | None = None,
     status: str | None = None,
-    bank_account_id: int | None = None,
+    bank_account_id: str | None = None,
     customer_id: int | None = None,
     q: str | None = None,
     user=Depends(require_login),
@@ -34,22 +33,18 @@ def lancamentos_page(
 
     competence = normalize_competence(competence) or competence
 
+    bank_account_id_int = int(bank_account_id) if (bank_account_id or '').strip().isdigit() else None
+
     entries = list_entries(
         db,
         competence=competence,
         kind=kind,
         status=status,
-        bank_account_id=bank_account_id,
+        bank_account_id=bank_account_id_int,
         customer_id=customer_id,
         q=q,
     )
 
-    accounts = (
-        db.query(BankAccount)
-        .filter(BankAccount.is_active == True)  # noqa: E712
-        .order_by(BankAccount.name.asc())
-        .all()
-    )
     customers = db.query(Customer).order_by(Customer.name.asc()).all()
 
     entradas = sum(float(x.amount) for x in entries if x.kind == "ENTRADA")
@@ -63,12 +58,10 @@ def lancamentos_page(
             "user": user,
             "competence": competence,
             "entries": entries,
-            "accounts": accounts,
             "customers": customers,
             "filters": {
                 "kind": kind,
                 "status": status,
-                "bank_account_id": bank_account_id,
                 "customer_id": customer_id,
                 "q": q,
             },
@@ -87,8 +80,8 @@ def lancamentos_create(
     status: str = Form("REALIZADO"),
     category: str | None = Form(None),
     cost_center: str | None = Form(None),
-    bank_account_id: int | None = Form(None),
-    customer_id: int | None = Form(None),
+    bank_account_id: str | None = Form(None),
+    customer_id: str | None = Form(None),
     notes: str | None = Form(None),
     repeat_extra_months: int = Form(0),
     repeat_until: str | None = Form(None),
@@ -105,6 +98,8 @@ def lancamentos_create(
     competence = normalize_competence(competence) or competence
 
     d0 = date.fromisoformat(entry_date)
+    bank_account_id_int = int(bank_account_id) if (bank_account_id or "").strip().isdigit() else None
+    customer_id_int = int(customer_id) if (customer_id or "").strip().isdigit() else None
 
     # cria o lançamento principal
     create_entry(
@@ -117,8 +112,8 @@ def lancamentos_create(
         status=status,
         category=category,
         cost_center=cost_center,
-        bank_account_id=bank_account_id,
-        customer_id=customer_id,
+        bank_account_id=bank_account_id_int,
+        customer_id=customer_id_int,
         notes=notes,
     )
 
@@ -147,8 +142,8 @@ def lancamentos_create(
                 status=status,
                 category=category,
                 cost_center=cost_center,
-                bank_account_id=bank_account_id,
-                customer_id=customer_id,
+                bank_account_id=bank_account_id_int,
+                customer_id=customer_id_int,
                 notes=notes,
             )
             i += 1
@@ -168,8 +163,8 @@ def lancamentos_create(
                     status=status,
                     category=category,
                     cost_center=cost_center,
-                    bank_account_id=bank_account_id,
-                    customer_id=customer_id,
+                    bank_account_id=bank_account_id_int,
+                    customer_id=customer_id_int,
                     notes=notes,
                 )
     return RedirectResponse(url=f"/lancamentos?competence={competence}", status_code=303)

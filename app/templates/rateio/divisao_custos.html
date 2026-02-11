@@ -7,25 +7,30 @@
 <div class="grid grid-cols-1 gap-6">
 
   <!-- FILTROS -->
-  <div class="glass rounded-2xl p-6 shadow">
+  <div class="glass p-7">
     <div>
       <div class="text-sm font-semibold">Competência</div>
-      <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">Escolha o mês para visualizar as despesas e o valor de cada construtora. Use o botão para baixar os PDFs.</div>
+      <div class="mt-1 text-sm text-slate-500">Escolha o mês para visualizar as despesas e o valor de cada construtora. Use o botão para baixar os PDFs.</div>
     </div>
 
     <form id="filters" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3" method="get" action="/divisao-custos">
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Competência</label>
+        <label class="block text-xs text-slate-500">Competência</label>
         <input name="competence" type="month" value="{{ competence }}"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div class="md:col-span-3 flex gap-2 items-end">
-        <button class="ripple w-full rounded-xl bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/10 px-4 py-2.5 text-sm font-semibold hover:bg-white dark:hover:bg-white/15">
+        <button class="ripple w-full rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-sm font-semibold hover:bg-white dark:hover:bg-white/15">
           Aplicar
         </button>
 
-        <a class="ripple whitespace-nowrap rounded-xl bg-white/90 dark:bg-white/10 border border-slate-200 dark:border-white/10 px-4 py-2.5 text-sm font-semibold hover:bg-white dark:hover:bg-white/15"
+        <a class="ripple whitespace-nowrap rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-sm font-semibold hover:bg-white dark:hover:bg-white/15"
+           href="/divisao-custos/pdf/resumo?competence={{ competence }}">
+          Resumo (PDF)
+        </a>
+
+        <a class="ripple whitespace-nowrap rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-sm font-semibold hover:bg-white dark:hover:bg-white/15"
            href="/divisao-custos/pdfs.zip?competence={{ competence }}">
           Baixar PDFs (ZIP)
         </a>
@@ -37,16 +42,16 @@
     {% set total_final = (preview.total_com_reserva or 0) if preview else 0 %}
 
     <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Total de despesas (manual)</div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Total de despesas (manual)</div>
         <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(preview.total_despesas) }}</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Fundo de reserva ({{ (preview.reserve_rate*100)|int }}%)</div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Fundo de reserva ({{ (preview.reserve_rate*100)|int }}%)</div>
         <div class="mt-1 text-lg font-semibold">R$ {{ '%.2f'|format(total_reserva) }}</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/10 p-4">
-        <div class="text-xs text-slate-600 dark:text-slate-300">Total a arrecadar (despesas + reserva)</div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Total a arrecadar (despesas + reserva)</div>
         <div class="mt-1 text-lg font-semibold text-brandGreen">R$ {{ '%.2f'|format(total_final) }}</div>
         <div class="mt-1 text-[11px] text-slate-500">Ativas: <b>{{ companies|length }}</b> construtora(s)</div>
       </div>
@@ -59,11 +64,11 @@
 <div class="mt-8 grid grid-cols-1 xl:grid-cols-2 gap-6">
 
   <!-- DESPESAS -->
-  <div class="glass rounded-2xl p-6 shadow">
+  <div class="glass p-7">
     <div class="flex items-center justify-between gap-4">
       <div>
         <div class="text-sm font-semibold">Despesas (inserção manual)</div>
-        <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">Use <b>Repetir</b> para gerar despesas recorrentes (1 mês, 2 meses, 1 ano).</div>
+        <div class="mt-1 text-sm text-slate-500">Use <b>Repetir</b> para gerar despesas recorrentes (1 mês, 2 meses, 1 ano).</div>
       </div>
       <div class="text-xs text-slate-500 dark:text-slate-400">Itens no mês: <b>{{ preview.despesas|length }}</b></div>
     </div>
@@ -72,32 +77,32 @@
       <input type="hidden" name="competence" value="{{ competence }}" />
 
       <div class="md:col-span-2">
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Descrição</label>
+        <label class="block text-xs text-slate-500">Descrição</label>
         <input name="description" required placeholder="Ex: Segurança e vigilância"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Categoria (opcional)</label>
+        <label class="block text-xs text-slate-500">Categoria (opcional)</label>
         <input name="category" placeholder="Ex: Segurança"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Valor (R$)</label>
+        <label class="block text-xs text-slate-500">Valor (R$)</label>
         <input name="amount" type="number" step="0.01" min="0" required
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Data-base</label>
+        <label class="block text-xs text-slate-500">Data-base</label>
         <input name="expense_date" type="date" value="{{ competence }}-01"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Repetir</label>
-        <select name="recurrence_months" class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm">
+        <label class="block text-xs text-slate-500">Repetir</label>
+        <select name="recurrence_months" class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm">
           <option value="0">Não repetir</option>
           <option value="1">Todo mês (1 mês)</option>
           <option value="2">A cada 2 meses</option>
@@ -106,15 +111,15 @@
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Repetir até (opcional)</label>
+        <label class="block text-xs text-slate-500">Repetir até (opcional)</label>
         <input name="end_date" type="date"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div class="md:col-span-2">
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Observações (opcional)</label>
+        <label class="block text-xs text-slate-500">Observações (opcional)</label>
         <input name="notes" placeholder="Opcional"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div class="md:col-span-2">
@@ -124,9 +129,9 @@
       </div>
     </form>
 
-    <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-white/10">
+    <div class="mt-4 overflow-auto rounded-2xl border border-slate-200">
       <table class="min-w-full text-sm">
-        <thead class="bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300">
+        <thead class="bg-slate-50 dark:bg-white/5 text-slate-500">
           <tr>
             <th class="text-left font-semibold px-4 py-3">Descrição</th>
             <th class="text-left font-semibold px-4 py-3">Categoria</th>
@@ -140,9 +145,9 @@
           {% for d in preview.despesas %}
             <tr class="hover:bg-black/5 dark:hover:bg-white/5">
               <td class="px-4 py-3 font-medium">{{ d.description }}</td>
-              <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ d.category }}</td>
+              <td class="px-4 py-3 text-slate-500">{{ d.category }}</td>
               <td class="px-4 py-3">{{ d.expense_date }}</td>
-              <td class="px-4 py-3 text-slate-600 dark:text-slate-300">
+              <td class="px-4 py-3 text-slate-500">
                 {% if d.recurrence_months == 0 %}—{% elif d.recurrence_months == 1 %}Mensal{% elif d.recurrence_months == 2 %}2 meses{% elif d.recurrence_months == 12 %}Anual{% else %}{{ d.recurrence_months }} meses{% endif %}
                 {% if d.end_date %}<span class="text-xs"> (até {{ d.end_date }})</span>{% endif %}
               </td>
@@ -150,7 +155,7 @@
               <td class="px-4 py-3 text-right">
                 <form method="post" action="/divisao-custos/despesas/{{ d.id }}/delete" onsubmit="return confirm('Excluir esta despesa?')">
                   <input type="hidden" name="competence" value="{{ competence }}" />
-                  <button class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white/90 dark:hover:bg-white/15">
+                  <button class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white bg-white border border-black/10 border-slate-200 hover:bg-white/90 dark:hover:bg-white/15">
                     <i data-lucide="trash" class="h-4 w-4"></i>
                     Excluir
                   </button>
@@ -171,11 +176,11 @@
 
 
   <!-- CONSTRUTORAS -->
-  <div class="glass rounded-2xl p-6 shadow">
+  <div class="glass p-7">
     <div class="flex items-center justify-between gap-4">
       <div>
         <div class="text-sm font-semibold">Construtoras</div>
-        <div class="mt-1 text-sm text-slate-600 dark:text-slate-300">As construtoras e percentuais são sincronizados automaticamente a partir do arquivo base. Você pode cadastrar novas aqui.</div>
+        <div class="mt-1 text-sm text-slate-500">As construtoras e percentuais são sincronizados automaticamente a partir do arquivo base. Você pode cadastrar novas aqui.</div>
       </div>
       <div class="text-xs text-slate-500 dark:text-slate-400">Ativas: <b>{{ companies|length }}</b></div>
     </div>
@@ -184,33 +189,33 @@
       <input type="hidden" name="competence" value="{{ competence }}" />
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Nome (curto)</label>
+        <label class="block text-xs text-slate-500">Nome (curto)</label>
         <input name="name" required placeholder="Ex: Agmar"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Razão social (opcional)</label>
+        <label class="block text-xs text-slate-500">Razão social (opcional)</label>
         <input name="legal_name" placeholder="Ex: CONSTRUTORA AGMAR LTDA."
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">CNPJ (opcional)</label>
+        <label class="block text-xs text-slate-500">CNPJ (opcional)</label>
         <input name="cnpj" placeholder="00.000.000/0000-00"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Percentual (fração ou %)</label>
+        <label class="block text-xs text-slate-500">Percentual (fração ou %)</label>
         <input name="percentual" placeholder="Ex: 0,12 (12%) ou 12"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div class="md:col-span-2">
-        <label class="block text-xs text-slate-600 dark:text-slate-300">Observações (opcional)</label>
+        <label class="block text-xs text-slate-500">Observações (opcional)</label>
         <input name="notes" placeholder="Opcional"
-               class="mt-1 w-full rounded-xl border border-slate-200 bg-white/80 dark:bg-white/10 dark:border-white/10 px-3 py-2 text-sm" />
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
       <div class="md:col-span-2">
@@ -220,9 +225,9 @@
       </div>
     </form>
 
-    <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-white/10">
+    <div class="mt-4 overflow-auto rounded-2xl border border-slate-200">
       <table class="min-w-full text-sm">
-        <thead class="bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300">
+        <thead class="bg-slate-50 dark:bg-white/5 text-slate-500">
           <tr>
             <th class="text-left font-semibold px-4 py-3">Construtora</th>
             <th class="text-right font-semibold px-4 py-3">Percentual</th>
@@ -249,7 +254,7 @@
               <td class="px-4 py-3 text-right font-semibold text-brandGreen">R$ {{ '%.2f'|format(r.total) }}</td>
               <td class="px-4 py-3 text-right">
                 <div class="flex justify-end gap-2">
-                  <a class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white/90 dark:hover:bg-white/15"
+                  <a class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white bg-white border border-black/10 border-slate-200 hover:bg-white/90 dark:hover:bg-white/15"
                      href="/divisao-custos/pdf/{{ r.id }}?competence={{ competence }}">
                     <i data-lucide="file-down" class="h-4 w-4"></i>
                     PDF
@@ -257,7 +262,7 @@
 
                   <form method="post" action="/divisao-custos/construtoras/{{ r.id }}/delete" onsubmit="return confirm('Excluir esta construtora?')">
                     <input type="hidden" name="competence" value="{{ competence }}" />
-                    <button class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white/90 dark:hover:bg-white/15">
+                    <button class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white bg-white border border-black/10 border-slate-200 hover:bg-white/90 dark:hover:bg-white/15">
                       <i data-lucide="trash" class="h-4 w-4"></i>
                       Excluir
                     </button>

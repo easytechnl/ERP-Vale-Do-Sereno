@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, DateTime, Text, ForeignKey
+from sqlalchemy import String, Integer, DateTime, Date, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from app.models.base import Base
@@ -41,3 +41,18 @@ class EmailAttachment(Base):
     email_message_id: Mapped[int] = mapped_column(ForeignKey("email_messages.id"), index=True)
     kind: Mapped[str] = mapped_column(String(30))  # boleto/fechamento/outro
     file_path: Mapped[str] = mapped_column(Text)
+
+
+class EmailReminderLog(Base):
+    __tablename__ = "email_reminder_logs"
+    __table_args__ = (
+        UniqueConstraint("installment_id", "days_before", name="uq_email_reminder_installment_days"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    installment_id: Mapped[int] = mapped_column(ForeignKey("installments.id"), index=True)
+    boleto_id: Mapped[int] = mapped_column(ForeignKey("boletos.id"), index=True)
+    customer_email: Mapped[str] = mapped_column(String(255), index=True)
+    due_date: Mapped["Date"] = mapped_column(Date)
+    days_before: Mapped[int] = mapped_column(Integer, index=True)  # 10, 5, 3, 1
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

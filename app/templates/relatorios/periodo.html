@@ -11,15 +11,15 @@
       <div class="mt-2 text-sm text-slate-600">Entradas: <b>R$ {{ '%.2f'|format(data.totals.entradas) }}</b> · Saídas: <b>R$ {{ '%.2f'|format(data.totals.saidas) }}</b> · Saldo: <b>R$ {{ '%.2f'|format(data.totals.saldo) }}</b></div>
     </div>
 
-    <form class="glass rounded-2xl p-4 shadow" method="get" action="/relatorios/periodo">
+    <form class="glass p-6" method="get" action="/relatorios/periodo">
       <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
         <div>
           <label class="text-slate-600">Mês final</label>
-          <input class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="end" value="{{ data.end }}" placeholder="YYYY-MM" />
+          <input class="input mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="end" value="{{ data.end }}" placeholder="YYYY-MM" />
         </div>
         <div>
           <label class="text-slate-600">Janela</label>
-          <select class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="months">
+          <select class="input mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" name="months">
             <option value="1" {% if data.months==1 %}selected{% endif %}>1 mês</option>
             <option value="3" {% if data.months==3 %}selected{% endif %}>3 meses</option>
             <option value="6" {% if data.months==6 %}selected{% endif %}>6 meses</option>
@@ -36,7 +36,7 @@
     </form>
   </div>
 
-  <div class="glass rounded-2xl p-6 shadow">
+  <div class="glass p-7">
     <div class="text-sm font-semibold">Série mensal</div>
     <div class="mt-4 overflow-x-auto">
       <table class="min-w-full text-sm">

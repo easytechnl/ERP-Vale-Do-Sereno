@@ -1,13 +1,23 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 
 from app.models.relatorios import MonthlyClose, ReportSnapshot
 from app.models.lancamentos import LedgerEntry
 from app.models.conciliacao import BankStatementImport, BankTransaction
+from app.models.boletos import Boleto
+from app.models.receber import Installment, Receivable
+from app.models.customer import Customer
 from app.core.storage import competence_dir, storage_root
-from app.modules.relatorios.pdf import generate_demonstrativo_pdf, generate_periodo_pdf, generate_lancamentos_pdf
+from app.modules.relatorios.pdf import (
+    generate_demonstrativo_pdf,
+    generate_periodo_pdf,
+    generate_lancamentos_pdf,
+    generate_boletos_pdf,
+    generate_variacao_entradas_pdf,
+)
 from app.modules.lancamentos.service import month_range, series_by_month, totals_for_period
+from app.modules.prestacao_contas.service import combined_totals_for_competence, prev_month
 
 
 
@@ -220,6 +230,114 @@ def generate_lancamentos_pdf_export(
         subtitle=subtitle,
         totals=payload["totals"],
         rows=payload["rows"],
+    )
+    return str(pdf_path)
+
+
+def _is_boleto_paid(status: str | None) -> bool:
+    st = (status or "").upper().strip()
+    return ("PAG" in st) or ("BAIX" in st)
+
+
+def list_boletos_for_export(db: Session, *, competence: str) -> list[dict]:
+    today = date.today()
+    rows = (
+        db.query(Boleto, Installment, Receivable, Customer)
+        .join(Installment, Installment.id == Boleto.installment_id)
+        .join(Receivable, Receivable.id == Installment.receivable_id)
+        .join(Customer, Customer.id == Receivable.customer_id)
+        .filter(Installment.competence_month == competence)
+        .order_by(Boleto.id.desc())
+        .all()
+    )
+
+    items: list[dict] = []
+    for b, inst, rec, cust in rows:
+        due = b.due_date or inst.due_date
+        amount = float(b.amount or inst.amount or rec.amount or 0.0)
+        status = (b.status or inst.status or "").upper().strip() or "PENDENTE"
+        is_paid = _is_boleto_paid(status)
+        overdue = bool(due and (not is_paid) and (due < today))
+        a_vencer = bool(due and (not is_paid) and (due >= today))
+        items.append(
+            {
+                "id": b.id,
+                "customer_name": cust.name,
+                "customer_email": cust.email,
+                "due_date": due,
+                "amount": amount,
+                "status": status,
+                "is_paid": is_paid,
+                "overdue": overdue,
+                "a_vencer": a_vencer,
+                "nosso_numero": b.nosso_numero,
+                "digitable_line": b.digitable_line,
+            }
+        )
+    return items
+
+
+def generate_boletos_pdf_export(
+    db: Session,
+    *,
+    competence: str,
+    status: str,
+) -> str:
+    items = list_boletos_for_export(db, competence=competence)
+    st = (status or "").lower().strip()
+    if st == "paid":
+        filtered = [x for x in items if x.get("is_paid")]
+        title = "Boletos pagos"
+    elif st == "unpaid":
+        filtered = [x for x in items if not x.get("is_paid")]
+        title = "Boletos nÃ£o pagos"
+    elif st == "due":
+        filtered = [x for x in items if (not x.get("is_paid")) and x.get("a_vencer")]
+        title = "Boletos a vencer"
+    else:
+        filtered = items
+        title = "Boletos (todos)"
+
+    subtitle = f"CompetÃªncia: {competence} â€¢ Filtro: {title}"
+    out_dir = storage_root() / "exports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    pdf_path = out_dir / f"{stamp}_boletos_{competence}_{st or 'all'}.pdf"
+
+    generate_boletos_pdf(
+        pdf_path,
+        title=title,
+        subtitle=subtitle,
+        rows=filtered,
+    )
+    return str(pdf_path)
+
+
+def generate_variacao_entradas_pdf_snapshot(db: Session, *, competence: str) -> str:
+    prev = prev_month(competence)
+    cur_totals = combined_totals_for_competence(db, competence)
+    prev_totals = combined_totals_for_competence(db, prev)
+
+    cur_val = float(cur_totals.get("entradas") or 0.0)
+    prev_val = float(prev_totals.get("entradas") or 0.0)
+    delta = cur_val - prev_val
+    delta_pct = None
+    if abs(prev_val) > 1e-9:
+        delta_pct = (delta / prev_val) * 100.0
+
+    out_dir = storage_root() / "exports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    pdf_path = out_dir / f"{stamp}_variacao_entradas_{competence}.pdf"
+
+    generate_variacao_entradas_pdf(
+        pdf_path,
+        competence=competence,
+        prev_competence=prev,
+        current_total=cur_val,
+        previous_total=prev_val,
+        delta=delta,
+        delta_pct=delta_pct,
     )
     return str(pdf_path)
 

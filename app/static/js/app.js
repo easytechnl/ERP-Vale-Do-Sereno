@@ -22,6 +22,7 @@ function toast(msg, type = "info") {
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3500);
+}
 
 
 async function postJSON(url, payload = null) {
@@ -42,10 +43,10 @@ async function postForm(url, formData) {
   return await res.text();
 }
 
-}
-
 (function initERPUI() {
   const root = document.documentElement;
+  const shell = document.getElementById("app-shell");
+  const sidebarBtn = document.getElementById("sidebarToggleBtn");
 
   // Year
   const yearEl = document.getElementById("year");
@@ -56,6 +57,12 @@ async function postForm(url, formData) {
     const saved = localStorage.getItem("theme");
     if (saved === "dark") root.classList.add("dark");
     if (saved === "light") root.classList.remove("dark");
+  } catch (_) {}
+
+  // Compact mode (reduce animations/effects)
+  try {
+    const compact = localStorage.getItem("ui_compact");
+    if (compact === "1") root.classList.add("compact");
   } catch (_) {}
 
   // Theme toggle
@@ -77,6 +84,77 @@ async function postForm(url, formData) {
   // Tooltips
   if (window.tippy) {
     window.tippy("[data-tip]", { animation: "scale", theme: "light-border" });
+  }
+
+  // Sidebar quick search (filters menu items)
+  const menuSearch = document.getElementById("menuSearchInput");
+  if (menuSearch) {
+    const nav = document.getElementById("nav");
+    const items = nav ? Array.from(nav.querySelectorAll("a.nav-item")) : [];
+    const normalize = (str) => {
+      const s = String(str || "").toLowerCase();
+      if (typeof s.normalize === "function") {
+        return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      }
+      return s;
+    };
+    const getBestMatch = () => {
+      const q = normalize(menuSearch.value.trim());
+      if (!q) return null;
+      let best = null;
+      items.forEach((a, idx) => {
+        const text = normalize(a.textContent);
+        const href = normalize(a.getAttribute("href") || "");
+        let score = 999;
+        if (text === q || href === q) score = 0;
+        else if (text.startsWith(q)) score = 1;
+        else if (text.includes(q)) score = 2;
+        else if (href.includes(q)) score = 3;
+        if (score < 999 && (!best || score < best.score || (score === best.score && best.index > idx))) {
+          best = { el: a, score, index: idx };
+        }
+      });
+      return best;
+    };
+    const searchWrap = document.querySelector("#app-sidebar .menu-search");
+    const searchBtn = document.querySelector("#app-sidebar .menu-search-btn");
+    if (searchWrap) {
+      searchWrap.addEventListener("click", (e) => {
+        if (e.target === searchBtn || e.target.closest(".menu-search-btn")) return;
+        menuSearch.focus();
+      });
+    }
+    const filterMenu = () => {
+      const q = normalize(menuSearch.value.trim());
+      items.forEach((a) => {
+        const text = normalize(a.textContent);
+        const href = normalize(a.getAttribute("href") || "");
+        const match = !q || text.includes(q) || href.includes(q);
+        a.style.display = match ? "" : "none";
+      });
+    };
+    menuSearch.addEventListener("input", filterMenu);
+    menuSearch.addEventListener("keyup", (e) => {
+      if (e.key !== "Enter") return;
+      const best = getBestMatch();
+      if (best && best.el) {
+        window.location.href = best.el.getAttribute("href");
+      } else if (menuSearch.value.trim()) {
+        toast("Nenhum módulo encontrado", "warn");
+      }
+    });
+    if (searchBtn) {
+      searchBtn.addEventListener("click", () => {
+        const best = getBestMatch();
+        if (best && best.el) {
+          window.location.href = best.el.getAttribute("href");
+        } else if (menuSearch.value.trim()) {
+          toast("Nenhum módulo encontrado", "warn");
+        } else {
+          menuSearch.focus();
+        }
+      });
+    }
   }
 
 
@@ -149,21 +227,34 @@ async function postForm(url, formData) {
     }
   })();
 
-  // GSAP intro
+  // GSAP intro (subtle fade only, no floating movement)
   if (window.gsap) {
     try {
-      window.gsap.set(".glass", { opacity: 0, y: 14 });
-      window.gsap.to(".glass", { opacity: 1, y: 0, duration: 0.6, ease: "power2.out", stagger: 0.06 });
-
-      window.gsap.from(".nav-item", {
-        opacity: 0,
-        x: -10,
-        duration: 0.5,
-        ease: "power2.out",
-        stagger: 0.05,
-        delay: 0.15,
-      });
+      window.gsap.set(".glass", { opacity: 0.96 });
+      window.gsap.to(".glass", { opacity: 1, duration: 0.25, ease: "power1.out" });
     } catch (_) {}
+  }
+
+  // Sidebar toggle (desktop)
+  if (shell && sidebarBtn) {
+    const syncSidebarBtnState = () => {
+      const hidden = shell.classList.contains("sidebar-hidden");
+      sidebarBtn.setAttribute("title", hidden ? "Mostrar menu lateral" : "Ocultar menu lateral");
+      sidebarBtn.setAttribute("aria-label", hidden ? "Mostrar menu lateral" : "Ocultar menu lateral");
+    };
+    try {
+      const collapsed = localStorage.getItem("sidebar_hidden") === "1";
+      if (collapsed) shell.classList.add("sidebar-hidden");
+    } catch (_) {}
+    syncSidebarBtnState();
+
+    sidebarBtn.addEventListener("click", () => {
+      shell.classList.toggle("sidebar-hidden");
+      syncSidebarBtnState();
+      try {
+        localStorage.setItem("sidebar_hidden", shell.classList.contains("sidebar-hidden") ? "1" : "0");
+      } catch (_) {}
+    });
   }
 
   // Tilt

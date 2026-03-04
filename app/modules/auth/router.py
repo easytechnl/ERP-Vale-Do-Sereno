@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Form, Depends
+from fastapi import APIRouter, Request, Form, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,14 @@ def login_action(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = authenticate(db, email=email.strip().lower(), password=password)
+    try:
+        user = authenticate(db, email=email.strip().lower(), password=password)
+    except HTTPException as exc:
+        return templates.TemplateResponse(
+            "auth/login.html",
+            {"request": request, "error": exc.detail, "email": email},
+            status_code=exc.status_code,
+        )
     request.session["user_id"] = user.id
     return RedirectResponse("/", status_code=303)
 

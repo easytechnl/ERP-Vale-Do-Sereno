@@ -24,6 +24,7 @@ class LedgerEntry(Base):
 
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
+    document_number: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     category: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     cost_center: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
 

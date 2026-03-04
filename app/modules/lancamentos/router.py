@@ -1,5 +1,6 @@
 from datetime import date
 import calendar
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import RedirectResponse
@@ -9,9 +10,18 @@ from app.core.deps import get_db
 from app.core.templating import templates
 from app.core.utils import normalize_competence
 from app.modules.auth.utils import require_login
-from app.models.bancos import BankAccount
 from app.models.customer import Customer
-from app.modules.lancamentos.service import list_entries, create_entry, delete_entry
+from app.modules.lancamentos.service import (
+    list_entries,
+    create_entry,
+    delete_entry,
+    ensure_lookup_tables,
+    sync_lookup_options_from_entries,
+    list_category_options,
+    list_cost_center_options,
+    create_category_option,
+    create_cost_center_option,
+)
 
 
 router = APIRouter(prefix="/lancamentos", tags=["lancamentos"])
@@ -26,6 +36,8 @@ def lancamentos_page(
     bank_account_id: int | None = None,
     customer_id: int | None = None,
     q: str | None = None,
+    new_category: str | None = None,
+    new_cost_center: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
@@ -33,6 +45,9 @@ def lancamentos_page(
         competence = date.today().strftime("%Y-%m")
 
     competence = normalize_competence(competence) or competence
+
+    ensure_lookup_tables(db)
+    sync_lookup_options_from_entries(db)
 
     entries = list_entries(
         db,
@@ -44,13 +59,9 @@ def lancamentos_page(
         q=q,
     )
 
-    accounts = (
-        db.query(BankAccount)
-        .filter(BankAccount.is_active == True)  # noqa: E712
-        .order_by(BankAccount.name.asc())
-        .all()
-    )
     customers = db.query(Customer).order_by(Customer.name.asc()).all()
+    categories = list_category_options(db)
+    cost_centers = list_cost_center_options(db)
 
     entradas = sum(float(x.amount) for x in entries if x.kind == "ENTRADA")
     saidas = sum(float(x.amount) for x in entries if x.kind == "SAIDA")
@@ -63,14 +74,18 @@ def lancamentos_page(
             "user": user,
             "competence": competence,
             "entries": entries,
-            "accounts": accounts,
             "customers": customers,
+            "categories": categories,
+            "cost_centers": cost_centers,
             "filters": {
                 "kind": kind,
                 "status": status,
-                "bank_account_id": bank_account_id,
                 "customer_id": customer_id,
                 "q": q,
+            },
+            "new_entry_defaults": {
+                "category": (new_category or "").strip(),
+                "cost_center": (new_cost_center or "").strip(),
             },
             "totals": {"entradas": entradas, "saidas": saidas, "saldo": saldo},
         },
@@ -84,6 +99,7 @@ def lancamentos_create(
     kind: str = Form(...),
     amount: float = Form(...),
     description: str = Form(...),
+    document_number: str | None = Form(None),
     status: str = Form("REALIZADO"),
     category: str | None = Form(None),
     cost_center: str | None = Form(None),
@@ -104,6 +120,15 @@ def lancamentos_create(
 
     competence = normalize_competence(competence) or competence
 
+    ensure_lookup_tables(db)
+    category = (category or "").strip() or None
+    cost_center = (cost_center or "").strip() or None
+    document_number = (document_number or "").strip() or None
+    if category:
+        create_category_option(db, category)
+    if cost_center:
+        create_cost_center_option(db, cost_center)
+
     d0 = date.fromisoformat(entry_date)
 
     # cria o lançamento principal
@@ -114,6 +139,7 @@ def lancamentos_create(
         kind=kind,
         amount=amount,
         description=description,
+        document_number=document_number,
         status=status,
         category=category,
         cost_center=cost_center,
@@ -144,6 +170,7 @@ def lancamentos_create(
                 kind=kind,
                 amount=amount,
                 description=description,
+                document_number=document_number,
                 status=status,
                 category=category,
                 cost_center=cost_center,
@@ -165,6 +192,7 @@ def lancamentos_create(
                     kind=kind,
                     amount=amount,
                     description=description,
+                    document_number=document_number,
                     status=status,
                     category=category,
                     cost_center=cost_center,
@@ -184,3 +212,37 @@ def lancamentos_delete(
 ):
     delete_entry(db, entry_id)
     return RedirectResponse(url=f"/lancamentos?competence={competence}", status_code=303)
+
+
+@router.post("/categorias/nova")
+def lancamentos_new_category(
+    competence: str = Form(...),
+    name: str = Form(...),
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    competence = normalize_competence(competence) or competence
+    ensure_lookup_tables(db)
+    item = create_category_option(db, name)
+    selected = quote(item.name) if item else ""
+    return RedirectResponse(
+        url=f"/lancamentos?competence={competence}&new_category={selected}#novo",
+        status_code=303,
+    )
+
+
+@router.post("/centros-custo/novo")
+def lancamentos_new_cost_center(
+    competence: str = Form(...),
+    name: str = Form(...),
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    competence = normalize_competence(competence) or competence
+    ensure_lookup_tables(db)
+    item = create_cost_center_option(db, name)
+    selected = quote(item.name) if item else ""
+    return RedirectResponse(
+        url=f"/lancamentos?competence={competence}&new_cost_center={selected}#novo",
+        status_code=303,
+    )

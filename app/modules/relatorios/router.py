@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import io
 from io import StringIO
 from typing import Iterable
 
@@ -22,6 +23,9 @@ from app.modules.relatorios.service import (
     periodo_report,
 )
 
+from app.modules.rateio.service import compute_divisao_custos
+from app.modules.rateio.pdf_summary import generate_rateio_summary_pdf_bytes
+
 router = APIRouter(prefix="/relatorios", tags=["relatorios"])
 
 
@@ -33,6 +37,7 @@ DEFAULT_FIELDS = [
     "status",
     "amount",
     "description",
+    "document_number",
     "category",
     "cost_center",
     "bank_account_id",
@@ -263,3 +268,20 @@ def export_completo_pdf(
         title="Relatório Completo (MVP)",
     )
     return FileResponse(path=path, filename="relatorio_completo.pdf", media_type="application/pdf")
+
+
+@router.get("/rateio/resumo.pdf")
+def export_rateio_resumo_pdf(
+    competence: str,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    """Gera um PDF resumo da divisão de custos (quanto cada construtora vai pagar)."""
+
+    preview = compute_divisao_custos(db=db, competence=competence)
+    pdf_bytes = generate_rateio_summary_pdf_bytes(preview)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=rateio_resumo_{competence}.pdf"},
+    )

@@ -161,7 +161,7 @@ def ensure_companies_seeded_from_docx(db: Session, docx_path: Path) -> tuple[int
     """Garante que TODAS as construtoras do DOCX existam no banco.
 
     - Se não existir, cria.
-    - Se existir (match por nome normalizado), atualiza percentual.
+    - Se existir (match por nome normalizado), NÃO sobrescreve percentual (para permitir edição manual).
 
     Retorna: (alteracoes, total_pct)
     """
@@ -201,9 +201,10 @@ def ensure_companies_seeded_from_docx(db: Session, docx_path: Path) -> tuple[int
             )
             inserted += 1
         else:
-            # atualiza percentual se mudou
+            # Importante: não sobrescrevemos o percentual automaticamente para permitir edição manual.
+            # Ainda assim, se o percentual estiver "zerado" (caso raro), preenchemos.
             current = float(target.percentual or 0.0)
-            if abs(current - pct) > 1e-10:
+            if current <= 0 and pct > 0:
                 target.percentual = pct
                 if not (target.notes or "").strip():
                     target.notes = "Base automática (DOCX)"

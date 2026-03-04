@@ -7,7 +7,7 @@ from app.models.lancamentos import LedgerEntry
 from app.models.conciliacao import BankStatementImport, BankTransaction
 from app.core.storage import competence_dir, storage_root
 from app.modules.relatorios.pdf import generate_demonstrativo_pdf, generate_periodo_pdf, generate_lancamentos_pdf
-from app.modules.lancamentos.service import month_range, series_by_month, totals_for_period
+from app.modules.lancamentos.service import ensure_ledger_entries_schema, month_range, series_by_month, totals_for_period
 
 
 
@@ -102,6 +102,7 @@ def list_extrato_for_export(
                 "status": "EXTRATO",
                 "amount": abs_amount,
                 "description": txn.description or "",
+                "document_number": "",
                 "category": "",
                 "cost_center": "",
                 "bank_account_id": "",
@@ -138,6 +139,7 @@ def list_lancamentos_for_export(
     - status: PREVISTO/REALIZADO ou None (ambos)
     """
     # Preferência: se existir extrato (OFX) importado no período, exporta com base nele.
+    ensure_ledger_entries_schema(db)
     extrato = list_extrato_for_export(db, kind=kind, start_ym=start_ym, end_ym=end_ym)
     if extrato.get('count', 0) > 0:
         # mantém status no filtro, mas a origem é o extrato (não há PREVISTO/REALIZADO).
@@ -170,6 +172,7 @@ def list_lancamentos_for_export(
                 "status": x.status,
                 "amount": float(x.amount),
                 "description": x.description,
+                "document_number": x.document_number or "",
                 "category": x.category or "",
                 "cost_center": x.cost_center or "",
                 "bank_account_id": x.bank_account_id or "",
@@ -237,6 +240,7 @@ def is_closed(db: Session, competence: str) -> bool:
     return close.status == "FECHADO"
 
 def close_month(db: Session, competence: str) -> dict:
+    ensure_ledger_entries_schema(db)
     close = get_or_create_monthly_close(db, competence)
     if close.status == "FECHADO":
         return {"status": "already_closed", "competence": competence}

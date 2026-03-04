@@ -1,0 +1,33 @@
+{
+  "preferences": {
+    "maintenance_notifications": true,
+    "critical_events": true,
+    "quiet_hours": false,
+    "auto_backup": true,
+    "email_reports": true,
+    "auto_due_reminder_emails": true
+  },
+  "status": {
+    "overall": "Operacional",
+    "last_check": "30/01/2026, 01:06:12",
+    "services": {
+      "api": "Online",
+      "db": "Online",
+      "queue": "Online",
+      "storage": "Online"
+    }
+  },
+  "email": {
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "arcvscobranca@gmail.com",
+    "smtp_pass": "ljukoavbsoftsyis",
+    "smtp_from": "arcvscobranca@gmail.com",
+    "smtp_tls": true
+  },
+  "last_backup": "06/02/2026, 01:47:50",
+  "last_backup_path": "data\\storage\\backups\\erp_backup_20260206_014750.dump",
+  "last_backup_error": null,
+  "last_restore": null,
+  "last_restore_error": null
+}

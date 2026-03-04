@@ -1,5 +1,6 @@
 import random
 from datetime import date
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.models.receber import Installment
@@ -10,6 +11,35 @@ from app.modules.boletos.pdf import generate_boleto_pdf
 from app.modules.boletos.cnab.adapters import stub as cnab_adapter
 from app.models.bancos import BankAccount
 from app.models.lancamentos import LedgerEntry
+
+
+def ensure_boletos_receber_schema(db: Session) -> None:
+    """Garantir coluna nota_fiscal_id em boletos_a_receber para bases antigas."""
+    bind = db.get_bind()
+    insp = inspect(bind)
+    try:
+        cols = {c["name"] for c in insp.get_columns("boletos_a_receber")}
+    except Exception:
+        return
+
+    if "nota_fiscal_id" not in cols:
+        if bind.dialect.name == "sqlite":
+            db.execute(text("ALTER TABLE boletos_a_receber ADD COLUMN nota_fiscal_id INTEGER"))
+        else:
+            db.execute(text("ALTER TABLE boletos_a_receber ADD COLUMN IF NOT EXISTS nota_fiscal_id INTEGER"))
+        db.commit()
+
+    # Index opcional para filtro/join
+    try:
+        db.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_boletos_a_receber_nota_fiscal_id "
+                "ON boletos_a_receber (nota_fiscal_id)"
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
 
 def _fake_linha_digitavel() -> str:
     # placeholder

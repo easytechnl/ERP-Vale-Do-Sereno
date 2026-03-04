@@ -10,3 +10,6 @@ def _engine():
 
 ENGINE = _engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=ENGINE)
+
+# Registers audit log hooks for all models.
+import app.core.audit_events  # noqa: E402,F401

@@ -1,0 +1,429 @@
+﻿{% extends "layout.html" %}
+{% set title = "Configurações do Sistema" %}
+{% set page_subtitle = "Gerencie preferências, monitore o sistema e mantenha backups atualizados." %}
+
+{% block content %}
+<div class="flex flex-col gap-7">
+  <section class="glass p-7">
+    <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div class="space-y-2">
+        <div class="text-xs uppercase tracking-[.2em] text-slate-400">Painel de administração</div>
+        <h2 class="text-2xl font-semibold text-slate-900">Configurações do Sistema</h2>
+        <p class="text-sm text-slate-500">Acompanhe preferências, monitore o sistema e mantenha o ambiente protegido.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="btnStatus" class="btn btn-primary rounded-full bg-slate-900">Ver status</button>
+        <button id="btnRefresh" class="btn btn-primary rounded-full bg-brandGreen shadow">Atualizar agora</button>
+      </div>
+    </div>
+
+    <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Ambiente</div>
+        <div class="mt-1 font-semibold text-slate-800">Produção</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Status geral</div>
+        <div class="mt-1 font-semibold text-slate-800" id="statusOverall">{{ status.overall or 'Operacional' }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Última verificação</div>
+        <div class="mt-1 font-semibold text-slate-800" id="statusLastCheck">{{ status.last_check or '--' }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Notificações</div>
+        <div class="mt-1 font-semibold text-slate-800">Ativas</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid grid-cols-12 gap-7">
+    <div class="col-span-12 lg:col-span-3 space-y-6">
+      <div class="glass p-6">
+        <div class="text-xs uppercase tracking-[.25em] text-slate-400">Menu</div>
+        <div class="mt-4 grid gap-2 text-sm">
+          <a class="btn btn-secondary rounded-2xl border border-slate-200 bg-white px-4 py-3 font-semibold" href="#geral">Geral</a>
+          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#email">E-mail de cobranca</a>
+          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#aparencia">Aparência</a>
+          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#status">Saúde geral</a>
+          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#logs">Logs do sistema</a>
+          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#backup">Backup e restore</a>
+          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#usuarios">Usuários</a>
+          {% if user and user.role == 'admin' %}
+            <a class="rounded-2xl border border-transparent px-4 py-3 text-rose-600 hover:bg-rose-50" href="#limpeza">Limpeza de dados</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="glass p-6">
+        <div class="text-sm font-semibold">Ações rápidas</div>
+        <div class="mt-3 grid gap-2 text-sm">
+          <button class="btn btn-secondary flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50" onclick="location.href='#logs'">Ver últimos logs <span class="text-xs text-slate-400">Ctrl + L</span></button>
+          <button class="btn btn-secondary flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50" onclick="location.href='#backup'">Gerenciar backups <span class="text-xs text-slate-400">Ctrl + B</span></button>
+          <button class="btn btn-secondary flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50" onclick="location.href='#geral'">Preferências gerais <span class="text-xs text-slate-400">Ctrl + G</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-span-12 lg:col-span-6 space-y-6">
+      <div class="glass p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">Centro de configurações</div>
+            <div class="mt-1 text-xs text-slate-500">Acompanhe detalhes do sistema, logs e backups em tempo real.</div>
+          </div>
+          <span class="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800">Sistema em monitoramento</span>
+        </div>
+      </div>
+
+      <div class="glass p-6" id="aparencia">
+        <div class="text-sm font-semibold">Aparência</div>
+        <div class="mt-1 text-xs text-slate-500">Personalize o tema e o modo de exibição.</div>
+        <div class="mt-4 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">Modo escuro</div>
+            <div class="text-xs text-slate-500">Alterne entre modo claro e escuro.</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input id="themeToggle" type="checkbox" class="sr-only peer" />
+            <div class="h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-brandGreen transition">
+              <div class="h-5 w-5 translate-x-0.5 translate-y-0.5 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5"></div>
+            </div>
+          </label>
+        </div>
+        <div class="mt-4 flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold">Modo compacto</div>
+            <div class="text-xs text-slate-500">Reduz animações e efeitos visuais.</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input id="compactToggle" type="checkbox" class="sr-only peer" />
+            <div class="h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-brandGreen transition">
+              <div class="h-5 w-5 translate-x-0.5 translate-y-0.5 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5"></div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="glass p-6" id="geral">
+        <div class="text-sm font-semibold">Preferências gerais</div>
+        <div class="mt-1 text-xs text-slate-500">Defina alertas e rotinas do sistema.</div>
+        <form class="mt-4 space-y-3 text-sm" method="post" action="/configuracoes/preferencias">
+          <label class="flex items-center gap-3"><input name="maintenance_notifications" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.maintenance_notifications %}checked{% endif %} /> Enviar notificações de manutenção</label>
+          <label class="flex items-center gap-3"><input name="critical_events" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.critical_events %}checked{% endif %} /> Registrar eventos críticos automaticamente</label>
+          <label class="flex items-center gap-3"><input name="quiet_hours" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.quiet_hours %}checked{% endif %} /> Modo silencioso em horários fixos</label>
+          <label class="flex items-center gap-3"><input name="auto_backup" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.auto_backup %}checked{% endif %} /> Backup automático diário</label>
+          <label class="flex items-center gap-3"><input name="email_reports" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.email_reports %}checked{% endif %} /> Enviar relatórios semanais por e-mail</label>
+          <label class="flex items-center gap-3"><input name="auto_due_reminder_emails" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.auto_due_reminder_emails %}checked{% endif %} /> Enviar lembretes automáticos (10, 5, 3 e 1 dia antes do vencimento)</label>
+          <button class="btn btn-primary mt-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Salvar preferências</button>
+        </form>
+      </div>
+
+      <div class="glass p-6" id="email">
+        <div class="text-sm font-semibold">E-mail de cobranca</div>
+        <div class="mt-1 text-xs text-slate-500">Configure o SMTP usado para enviar avisos e cobrancas. Se algum campo ficar vazio, o sistema usa os valores do .env.</div>
+        <form class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" method="post" action="/configuracoes/email">
+          <input name="smtp_host" class="input" placeholder="SMTP host" value="{{ email_settings.smtp_host or '' }}" />
+          <input name="smtp_port" class="input" placeholder="Porta" value="{{ email_settings.smtp_port or '' }}" />
+          <input name="smtp_user" class="input" placeholder="Usuario" value="{{ email_settings.smtp_user or '' }}" />
+          <input name="smtp_from" class="input" placeholder="Remetente (From)" value="{{ email_settings.smtp_from or '' }}" />
+          <input name="smtp_pass" type="password" class="input md:col-span-2" placeholder="Senha (deixe em branco para manter)" value="" />
+          <label class="flex items-center gap-3 text-sm">
+            <input name="smtp_tls" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if email_settings.smtp_tls %}checked{% endif %} />
+            Usar TLS
+          </label>
+          <button class="btn btn-primary md:col-span-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Salvar e-mail</button>
+        </form>
+      </div>
+
+      <div class="glass p-6" id="status">
+        <div class="flex items-center justify-between">
+          <div class="text-sm font-semibold">Status dos serviços</div>
+          <button id="btnRefreshInline" class="text-sm font-semibold text-brandGreen hover:opacity-80">Atualizar</button>
+        </div>
+        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div class="text-slate-500">API principal</div>
+            <div class="mt-1 font-semibold" id="badgeApi">{{ status.services.api if status.services else 'Online' }}</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div class="text-slate-500">Banco de dados</div>
+            <div class="mt-1 font-semibold" id="badgeDb">{{ status.services.db if status.services else 'Online' }}</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div class="text-slate-500">Fila e eventos</div>
+            <div class="mt-1 font-semibold" id="badgeQueue">{{ status.services.queue if status.services else 'Online' }}</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <div class="text-slate-500">Storage</div>
+            <div class="mt-1 font-semibold" id="badgeStorage">{{ status.services.storage if status.services else 'Online' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass p-6" id="logs">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-semibold">Logs do sistema</div>
+            <div class="mt-1 text-xs text-slate-500">Últimas alterações e ações realizadas no sistema.</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <a class="text-sm font-semibold text-brandGreen hover:opacity-80" href="/configuracoes?limit=200&module={{ filters.module }}&user_id={{ filters.user_id }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}#logs">Ver mais</a>
+            <a class="text-sm font-semibold text-slate-600 hover:opacity-80" href="/configuracoes/logs.csv?module={{ filters.module }}&user_id={{ filters.user_id }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">Exportar CSV</a>
+          </div>
+        </div>
+        <form class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm" method="get" action="/configuracoes#logs">
+          <select name="module" class="input">
+            <option value="">Todos os módulos</option>
+            {% for ent in entities %}
+              <option value="{{ ent }}" {% if filters.module == ent %}selected{% endif %}>{{ ent }}</option>
+            {% endfor %}
+          </select>
+          <select name="user_id" class="input">
+            <option value="">Todos os usuários</option>
+            {% for u in users %}
+              <option value="{{ u.id }}" {% if filters.user_id|string == u.id|string %}selected{% endif %}>{{ u.name }} ({{ u.email }})</option>
+            {% endfor %}
+          </select>
+          <input name="date_from" type="date" class="input" value="{{ filters.date_from }}" />
+          <input name="date_to" type="date" class="input" value="{{ filters.date_to }}" />
+          <button class="btn btn-primary md:col-span-4 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Filtrar</button>
+        </form>
+        <div class="mt-3 text-xs text-slate-500">Atualização em tempo real.</div>
+        <div class="mt-4 space-y-2 text-sm" id="logList" data-last-id="{{ logs[0].id if logs and logs|length > 0 else 0 }}">
+          {% if logs and logs|length > 0 %}
+            {% for log in logs %}
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3" data-log-id="{{ log.id }}">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="font-semibold text-slate-800">{{ log.entity }} • {{ log.action }}</div>
+                  <div class="text-xs text-slate-500">{{ log.created_at.strftime('%d/%m/%Y %H:%M') if log.created_at else '' }}</div>
+                </div>
+                <div class="mt-1 text-xs text-slate-500">Usuário: {{ log.actor_user_id or 'sistema' }} {% if log.entity_id %}• ID {{ log.entity_id }}{% endif %}</div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-slate-500">Nenhum log registrado ainda.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="glass p-6" id="usuarios">
+        <div class="text-sm font-semibold">Cadastro de usuários</div>
+        <div class="mt-1 text-xs text-slate-500">Usuários autorizados a acessar o sistema.</div>
+        <form class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" method="post" action="/configuracoes/usuarios/create">
+          <input name="name" class="input" placeholder="Nome" required />
+          <input name="email" type="email" class="input" placeholder="Email" required />
+          <input name="password" type="password" class="input" placeholder="Senha" required />
+          <select name="role" class="input">
+            <option value="admin">Administrador</option>
+            <option value="gestor">Gestor</option>
+            <option value="financeiro">Financeiro</option>
+          </select>
+          <button class="btn btn-primary md:col-span-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Criar usuário</button>
+        </form>
+        <div class="mt-4 space-y-2 text-sm">
+          {% for u in users %}
+            <div class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <div>
+                <div class="font-semibold">{{ u.name }} <span class="text-xs text-slate-500">({{ u.role }})</span></div>
+                <div class="text-xs text-slate-500">{{ u.email }}</div>
+              </div>
+              <form method="post" action="/configuracoes/usuarios/{{ u.id }}/toggle">
+                <button class="btn btn-secondary rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50">{{ 'Desativar' if u.is_active else 'Ativar' }}</button>
+              </form>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if user and user.role == 'admin' %}
+      <div class="glass p-6 border border-rose-200 bg-rose-50/50" id="limpeza">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-semibold text-rose-700">Zona de risco: limpeza de dados</div>
+            <div class="mt-1 text-xs text-rose-700/70">
+              Use apenas se precisar corrigir lançamentos ou boletos. A exclusão é permanente.
+            </div>
+          </div>
+          <span class="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700">Cuidado</span>
+        </div>
+
+        {% if request and request.query_params.get('danger') == 'ok' %}
+          <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            Limpeza executada com sucesso.
+          </div>
+        {% elif request and request.query_params.get('danger') == 'err' %}
+          <div class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+            Não foi possível executar. Verifique a confirmação e selecione pelo menos uma opção.
+          </div>
+        {% endif %}
+
+        <form class="mt-4 space-y-3 text-sm" method="post" action="/configuracoes/limpeza">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-rose-700">Competência (YYYY-MM)</label>
+              <input name="competence" class="input mt-1" placeholder="2026-02" />
+              <div class="mt-1 text-[11px] text-rose-700/70">
+                Preencha para excluir apenas da competência. Se vazio, exclui tudo.
+              </div>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-rose-700">Confirmação</label>
+              <input name="confirm" class="input mt-1" placeholder="EXCLUIR ou EXCLUIR TUDO" required />
+              <div class="mt-1 text-[11px] text-rose-700/70">
+                Digite <b>EXCLUIR</b> para competência ou <b>EXCLUIR TUDO</b> para geral.
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_ledger" /> Excluir lançamentos (entrada/saída)</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos" /> Excluir boletos gerados + CNAB</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_installments" /> Excluir parcelas/recebíveis gerados</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_receivables_orphans" /> Limpar contratos sem parcelas</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_pagar" /> Excluir boletos a pagar (manual)</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_receber" /> Excluir boletos a receber (manual)</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_notas_fiscais" /> Excluir notas fiscais</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_conciliacao" /> Excluir conciliação/OFX</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_balance_adjustments" /> Zerar ajustes da prestação de contas</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_logs" /> Excluir histórico (logs)</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_reports" /> Excluir relatórios/fechamentos</label>
+          </div>
+
+          <button class="btn btn-primary rounded-2xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">
+            Executar limpeza
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="col-span-12 lg:col-span-3 space-y-6">
+      <div class="glass p-6">
+        <div class="text-sm font-semibold">Resumo rápido</div>
+        <div class="mt-4 space-y-2 text-sm">
+          <div class="flex items-center justify-between"><span class="text-slate-600">Último backup</span><span class="font-semibold" id="lastBackup">{{ last_backup or '--' }}</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-600">Atualização do status</span><span class="font-semibold" id="statusLastCheckSummary">{{ status.last_check or '--' }}</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-600">Alertas abertos</span><span class="font-semibold">0</span></div>
+        </div>
+        <button class="btn btn-primary mt-4 w-full rounded-2xl bg-brandGreen px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-95" onclick="location.href='#status'">Ver detalhes do sistema</button>
+      </div>
+
+      <div class="glass p-6" id="backup">
+        <div class="text-sm font-semibold">Backup e restore</div>
+        {% if db_kind == 'postgres' %}
+        <div class="mt-2 text-xs text-slate-500">Backup via pg_dump (PostgreSQL). Para restaurar, envie .dump ou .sql.</div>
+        {% elif db_kind == 'sqlite' %}
+        <div class="mt-2 text-xs text-slate-500">Backup copia o arquivo SQLite. O restore substitui o arquivo atual.</div>
+        {% else %}
+        <div class="mt-2 text-xs text-slate-500">Banco nao identificado. Verifique DATABASE_URL.</div>
+        {% endif %}
+        <form class="mt-4" method="post" action="/configuracoes/backup/trigger">
+          <button class="btn btn-primary w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Executar backup agora</button>
+        </form>
+        {% if last_backup_error %}<div class="mt-3 text-xs text-rose-600">{{ last_backup_error }}</div>{% endif %}
+        {% if last_backup_path %}<a class="mt-3 inline-block text-xs font-semibold text-brandGreen" href="/configuracoes/backup/download">Baixar ultimo backup</a>{% endif %}
+        <div class="mt-4 text-xs text-slate-500">Restore apaga dados atuais. Faca com o sistema parado, se possivel.</div>
+        <form class="mt-3 space-y-2" method="post" action="/configuracoes/backup/restore" enctype="multipart/form-data">
+          <input class="input text-xs" type="file" name="backup_file" required />
+          <input class="input text-xs" name="confirm_restore" placeholder="RESTAURAR" required />
+          <button class="btn btn-primary w-full rounded-2xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Restaurar backup</button>
+        </form>
+        {% if last_restore_error %}<div class="mt-3 text-xs text-rose-600">{{ last_restore_error }}</div>{% endif %}
+        {% if last_restore %}<div class="mt-2 text-xs text-slate-500">Ultimo restore: <b>{{ last_restore }}</b></div>{% endif %}
+      </div>
+
+      <div class="glass p-6 border border-dashed border-emerald-200 bg-emerald-50/50">
+        <div class="text-sm font-semibold text-emerald-900">Dica do dia</div>
+        <p class="mt-2 text-xs text-emerald-900/80">Ative alertas automáticos para ser avisado quando algum serviço sair do ar.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+  (function(){
+    const root = document.documentElement;
+    const themeToggle = document.getElementById('themeToggle');
+    const compactToggle = document.getElementById('compactToggle');
+    if (themeToggle) {
+      const saved = localStorage.getItem('theme');
+      themeToggle.checked = saved === 'dark' || root.classList.contains('dark');
+      themeToggle.addEventListener('change', () => {
+        root.classList.toggle('dark', themeToggle.checked);
+        localStorage.setItem('theme', themeToggle.checked ? 'dark' : 'light');
+      });
+    }
+    if (compactToggle) {
+      const compactSaved = localStorage.getItem('ui_compact');
+      compactToggle.checked = compactSaved === '1' || root.classList.contains('compact');
+      compactToggle.addEventListener('change', () => {
+        root.classList.toggle('compact', compactToggle.checked);
+        localStorage.setItem('ui_compact', compactToggle.checked ? '1' : '0');
+      });
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/configuracoes/status/refresh', { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const overall = data.overall || 'Operacional';
+        const last = data.last_check || '--';
+        document.getElementById('statusOverall').textContent = overall;
+        document.getElementById('statusLastCheck').textContent = last;
+        document.getElementById('statusLastCheckSummary').textContent = last;
+        if (data.services) {
+          document.getElementById('badgeApi').textContent = data.services.api || 'Online';
+          document.getElementById('badgeDb').textContent = data.services.db || 'Online';
+          document.getElementById('badgeQueue').textContent = data.services.queue || 'Online';
+          document.getElementById('badgeStorage').textContent = data.services.storage || 'Online';
+        }
+        if (window.toast) toast('Status atualizado com sucesso', 'ok');
+      } catch (_) {
+        if (window.toast) toast('Erro ao atualizar status', 'err');
+      }
+    }
+
+    document.getElementById('btnRefresh')?.addEventListener('click', refreshStatus);
+    document.getElementById('btnRefreshInline')?.addEventListener('click', refreshStatus);
+    document.getElementById('btnStatus')?.addEventListener('click', () => {
+      location.href = '#status';
+      refreshStatus();
+    });
+
+    const logList = document.getElementById('logList');
+    let lastId = Number(logList?.dataset.lastId || '0');
+
+    async function pollLogs() {
+      if (!logList) return;
+      try {
+        const res = await fetch(`/configuracoes/logs/live?since_id=${lastId}&limit=20`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.items) && data.items.length) {
+          data.items.reverse().forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'rounded-2xl border border-slate-200 bg-white px-4 py-3';
+            row.dataset.logId = String(item.id);
+            row.innerHTML = `
+              <div class="flex items-center justify-between gap-3">
+                <div class="font-semibold text-slate-800">${item.entity} • ${item.action}</div>
+                <div class="text-xs text-slate-500">${item.created_at || ''}</div>
+              </div>
+              <div class="mt-1 text-xs text-slate-500">Usuário: ${item.actor_user_id || 'sistema'} ${item.entity_id ? `• ID ${item.entity_id}` : ''}</div>
+            `;
+            logList.prepend(row);
+          });
+          lastId = data.last_id || lastId;
+          logList.dataset.lastId = String(lastId);
+        }
+      } catch (_) {}
+    }
+
+    setInterval(pollLogs, 5000);
+  })();
+</script>
+{% endblock %}

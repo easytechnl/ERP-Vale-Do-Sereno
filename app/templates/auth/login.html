@@ -1,25 +1,442 @@
-{% extends "layout.html" %}
+﻿{% extends "layout.html" %}
 {% set title = "Login" %}
 {% set hide_shell = true %}
 
+{% block head_extra %}
+  <style>
+    /* Login-only visual system */
+    :root{
+      --login-text: #0f172a;
+      --login-muted: rgba(15,23,42,.65);
+      --login-card-bg: rgba(255,255,255,.86);
+      --login-brand-bg: rgba(255,255,255,.7);
+      --login-border: rgba(148,163,184,.28);
+      --login-shadow: 0 22px 60px rgba(15,23,42,.18);
+      --login-glow: 0 0 32px rgba(16,185,129,.12);
+      --login-bg:
+        radial-gradient(1200px 600px at 10% -10%, rgba(16,185,129,.18), transparent 60%),
+        radial-gradient(900px 500px at 110% 10%, rgba(250,204,21,.18), transparent 55%),
+        linear-gradient(135deg, #f8fafc 0%, #eef2f7 45%, #f8fafc 100%);
+      --login-chip-bg: rgba(16,185,129,.1);
+      --login-chip-text: #065f46;
+      --login-btn-text: #04100b;
+      --login-btn-bg: linear-gradient(135deg, #34d399, #facc15);
+      --login-input-bg: rgba(255,255,255,.9);
+      --login-input-text: #0f172a;
+    }
+    .dark{
+      --login-text: #e2e8f0;
+      --login-muted: rgba(226,232,240,.75);
+      --login-card-bg: rgba(7,12,9,.72);
+      --login-brand-bg: linear-gradient(135deg, rgba(16,185,129,.14), rgba(15,23,42,.15));
+      --login-border: rgba(148,163,184,.2);
+      --login-shadow: 0 25px 80px rgba(5,10,7,.55);
+      --login-glow: 0 0 40px rgba(16,185,129,.18);
+      --login-bg:
+        radial-gradient(1200px 600px at 10% -10%, rgba(16,185,129,.35), transparent 60%),
+        radial-gradient(900px 500px at 110% 10%, rgba(250,204,21,.25), transparent 55%),
+        linear-gradient(135deg, #070b08 0%, #0b1510 35%, #08140c 65%, #0a1110 100%);
+      --login-chip-bg: rgba(16,185,129,.12);
+      --login-chip-text: #d1fae5;
+      --login-btn-text: #04100b;
+      --login-btn-bg: linear-gradient(135deg, #34d399, #facc15);
+      --login-input-bg: rgba(2,6,4,.6);
+      --login-input-text: #e2e8f0;
+    }
+    body{ background: var(--login-bg); }
+    .grid-overlay, .bg-aurora, .bg-scan, #tsparticles{ display:none !important; }
+
+    .login-stage{
+      position: relative;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: clamp(20px, 3vw, 48px);
+      overflow: hidden;
+      color: var(--login-text);
+    }
+    .login-bg{
+      position: fixed;
+      inset: 0;
+      background: var(--login-bg);
+      background-size: 320% 320%;
+      animation: loginPulse 6s ease-in-out infinite alternate, bgDrift 4.8s ease-in-out infinite;
+      z-index: 0;
+    }
+    .login-glow{
+      position: absolute;
+      inset: -20%;
+      background:
+        radial-gradient(360px 240px at 20% 20%, rgba(16,185,129,.22), transparent 60%),
+        radial-gradient(380px 260px at 80% 30%, rgba(250,204,21,.18), transparent 60%),
+        radial-gradient(460px 300px at 50% 80%, rgba(6,78,59,.35), transparent 60%);
+      filter: blur(18px);
+      opacity: .8;
+      animation: glowDrift 16s ease-in-out infinite;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .login-blur-orb{
+      position: absolute;
+      width: 340px;
+      height: 340px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 30%, rgba(16,185,129,.45), rgba(16,185,129,.06) 60%, transparent 70%);
+      filter: blur(10px);
+      opacity: .9;
+      animation: orbFloat 4.4s ease-in-out infinite;
+      z-index: 0;
+    }
+    .login-blur-orb.orb-2{
+      width: 280px;
+      height: 280px;
+      right: 6%;
+      top: 12%;
+      background: radial-gradient(circle at 30% 30%, rgba(250,204,21,.4), rgba(250,204,21,.05) 60%, transparent 70%);
+      animation-delay: -1.2s;
+    }
+    .login-blur-orb.orb-1{
+      left: 6%;
+      bottom: 8%;
+    }
+    .login-blur-orb.orb-3{
+      width: 220px;
+      height: 220px;
+      left: 55%;
+      bottom: 18%;
+      background: radial-gradient(circle at 30% 30%, rgba(34,197,94,.35), rgba(34,197,94,.05) 60%, transparent 70%);
+      animation-delay: -0.6s;
+    }
+    .login-wave{
+      position: absolute;
+      inset: -20%;
+      background:
+        radial-gradient(60% 30% at 10% 30%, rgba(16,185,129,.26), transparent 70%),
+        radial-gradient(55% 35% at 70% 10%, rgba(250,204,21,.22), transparent 70%),
+        radial-gradient(65% 35% at 40% 80%, rgba(34,197,94,.18), transparent 70%);
+      mix-blend-mode: screen;
+      opacity: 1;
+      filter: blur(3px);
+      animation: waveShift 4.6s ease-in-out infinite;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .login-wave::after{
+      content:"";
+      position: absolute;
+      inset: -10%;
+      background:
+        radial-gradient(50% 28% at 85% 70%, rgba(34,197,94,.24), transparent 70%),
+        radial-gradient(60% 30% at 20% 80%, rgba(250,204,21,.2), transparent 70%);
+      opacity: .95;
+      filter: blur(6px);
+      animation: waveShiftAlt 3.8s ease-in-out infinite;
+    }
+    .login-wave::before{
+      content:"";
+      position: absolute;
+      inset: -15%;
+      background:
+        radial-gradient(55% 35% at 15% 15%, rgba(16,185,129,.22), transparent 70%),
+        radial-gradient(65% 40% at 85% 35%, rgba(250,204,21,.18), transparent 70%),
+        radial-gradient(70% 35% at 55% 90%, rgba(34,197,94,.2), transparent 70%);
+      opacity: .85;
+      filter: blur(10px);
+      animation: waveShiftAlt2 3.2s ease-in-out infinite;
+    }
+    .dark .login-wave{
+      opacity: .75;
+    }
+
+    .login-shell{
+      position: relative;
+      z-index: 1;
+      width: min(1080px, 100%);
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: clamp(18px, 4vw, 32px);
+      align-items: stretch;
+    }
+    .login-brand{
+      border-radius: 28px;
+      padding: clamp(22px, 4vw, 36px);
+      background: var(--login-brand-bg);
+      border: 1px solid var(--login-border);
+      box-shadow: var(--login-shadow);
+      backdrop-filter: blur(10px);
+    }
+    .login-card{
+      border-radius: 26px;
+      padding: clamp(22px, 4vw, 36px);
+      background: var(--login-card-bg);
+      border: 1px solid var(--login-border);
+      box-shadow:
+        0 18px 60px rgba(0,0,0,.25),
+        0 0 0 1px rgba(255,255,255,.03),
+        var(--login-glow);
+      backdrop-filter: blur(14px);
+    }
+    .login-chip{
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      padding: .35rem .75rem;
+      border-radius: 999px;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--login-chip-text);
+      background: var(--login-chip-bg);
+      border: 1px solid rgba(16,185,129,.3);
+    }
+    .login-title{ color: var(--login-text); }
+    .login-muted{ color: var(--login-muted); }
+    .login-input{
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--login-border);
+      background: var(--login-input-bg);
+      padding: .8rem .95rem;
+      color: var(--login-input-text);
+      transition: border .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    .login-input:focus{
+      outline: none;
+      border-color: rgba(16,185,129,.65);
+      box-shadow: 0 0 0 3px rgba(16,185,129,.18);
+      transform: translateY(-1px);
+    }
+    .login-input:invalid:not(:placeholder-shown){
+      border-color: rgba(239,68,68,.7);
+      box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+    }
+    .login-input.error{
+      border-color: rgba(239,68,68,.75);
+      box-shadow: 0 0 0 3px rgba(239,68,68,.16);
+    }
+    .login-btn{
+      position: relative;
+      overflow: hidden;
+      border-radius: 14px;
+      padding: .85rem 1rem;
+      font-weight: 700;
+      color: var(--login-btn-text);
+      background: var(--login-btn-bg);
+      box-shadow: 0 10px 30px rgba(16,185,129,.35);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .login-btn:hover{
+      transform: translateY(-1px);
+      box-shadow: 0 16px 36px rgba(16,185,129,.45);
+    }
+    .login-btn::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      transform: translateX(-120%);
+      background: linear-gradient(110deg, transparent, rgba(255,255,255,.6), transparent);
+      transition: transform .6s ease;
+    }
+    .login-btn:hover::after{ transform: translateX(120%); }
+
+    .stat-card{
+      border-radius: 16px;
+      padding: .85rem 1rem;
+      background: rgba(15,23,42,.12);
+      border: 1px solid rgba(148,163,184,.18);
+    }
+    .dark .stat-card{
+      background: rgba(15,23,42,.35);
+    }
+    .login-alert{
+      border-radius: 14px;
+      border: 1px solid rgba(239,68,68,.35);
+      background: rgba(239,68,68,.08);
+      color: #fecaca;
+      padding: .7rem .85rem;
+      font-size: .85rem;
+    }
+    :root .login-alert{
+      color: #7f1d1d;
+      background: rgba(239,68,68,.12);
+    }
+    .login-theme-btn{
+      border-radius: 999px;
+      border: 1px solid var(--login-border);
+      background: var(--login-card-bg);
+      color: var(--login-text);
+      padding: .35rem .7rem;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .login-theme-btn:hover{
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(15,23,42,.12);
+    }
+
+    @keyframes loginPulse{
+      0%{ filter: hue-rotate(0deg) saturate(1); }
+      100%{ filter: hue-rotate(18deg) saturate(1.1); }
+    }
+    @keyframes bgDrift{
+      0%{ background-position: 0% 0%; }
+      33%{ background-position: 100% 70%; }
+      66%{ background-position: 20% 100%; }
+      100%{ background-position: 0% 0%; }
+    }
+    @keyframes waveShift{
+      0%{ transform: translate3d(-8%, -7%, 0) rotate(0deg) scale(1.04); }
+      50%{ transform: translate3d(9%, 7%, 0) rotate(3.8deg) scale(1.1); }
+      100%{ transform: translate3d(-8%, -7%, 0) rotate(0deg) scale(1.04); }
+    }
+    @keyframes waveShiftAlt{
+      0%{ transform: translate3d(7%, -6%, 0) rotate(-3deg) scale(1.04); }
+      50%{ transform: translate3d(-9%, 8%, 0) rotate(3.4deg) scale(1.12); }
+      100%{ transform: translate3d(7%, -6%, 0) rotate(-3deg) scale(1.04); }
+    }
+    @keyframes waveShiftAlt2{
+      0%{ transform: translate3d(-10%, 6%, 0) rotate(4deg) scale(1.06); }
+      50%{ transform: translate3d(10%, -8%, 0) rotate(-4.5deg) scale(1.14); }
+      100%{ transform: translate3d(-10%, 6%, 0) rotate(4deg) scale(1.06); }
+    }
+    @keyframes glowDrift{
+      0%,100%{ transform: translate3d(0,0,0); }
+      50%{ transform: translate3d(2%, -2%, 0); }
+    }
+    @keyframes orbFloat{
+      0%{ transform: translate3d(-28px, 18px, 0) scale(1.02); }
+      50%{ transform: translate3d(32px, -26px, 0) scale(1.14); }
+      100%{ transform: translate3d(-28px, 18px, 0) scale(1.02); }
+    }
+
+    @media (max-width: 900px){
+      .login-shell{ grid-template-columns: 1fr; }
+      .login-brand{ order: 2; }
+      .login-card{ order: 1; }
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-screen flex items-center justify-center px-4">
-  <div class="glass w-full max-w-md rounded-2xl p-8 shadow-xl">
-    <div class="text-2xl font-semibold">Acesso</div>
-    <div class="mt-1 text-sm text-slate-600">Entrar no Painel Financeiro ARCVS (MVP) Vale do Sereno.</div>
+<section class="login-stage">
+  <div class="login-bg"></div>
+  <div class="login-wave"></div>
+  <div class="login-glow"></div>
+  <div class="login-blur-orb orb-1"></div>
+  <div class="login-blur-orb orb-2"></div>
+  <div class="login-blur-orb orb-3"></div>
 
-    <form class="mt-6 grid gap-4" method="post" action="/login">
-      <div>
-        <label class="text-sm font-medium">E-mail</label>
-        <input name="email" type="email" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-violet-300" />
+  <div class="login-shell">
+    <div class="login-brand">
+      <div class="flex items-center justify-between gap-3">
+        <div class="login-chip">ERP Vale do Sereno</div>
+        <button id="themeBtn" class="login-theme-btn ripple" type="button">Modo</button>
       </div>
-      <div>
-        <label class="text-sm font-medium">Senha</label>
-        <input name="password" type="password" required class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-violet-300" />
-      </div>
-      <button class="rounded-xl bg-slate-900 px-4 py-3 text-white hover:bg-slate-800">Entrar</button>
+      <h1 class="mt-4 text-3xl sm:text-4xl font-semibold login-title">Painel Financeiro</h1>
+      <p class="mt-2 text-sm sm:text-base login-muted">
+        Gestão financeira clara, segura e rápida. Centralize cobranças, lançamentos e conciliações em um único lugar.
+      </p>
 
-    </form>
+      <div class="mt-6 grid gap-3 sm:grid-cols-2">
+        <div class="stat-card">
+          <p class="text-xs uppercase tracking-[0.2em] login-muted">Saldo Atual</p>
+          <p class="mt-1 text-lg font-semibold login-title">Controle em tempo real</p>
+        </div>
+        <div class="stat-card">
+          <p class="text-xs uppercase tracking-[0.2em] login-muted">Boletos & CNAB</p>
+          <p class="mt-1 text-lg font-semibold login-title">Tudo centralizado</p>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center gap-3">
+        <div class="h-12 w-12 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center">
+          <img src="/static/branding/arcvsctudo.png" alt="ARCVS" class="h-8 w-8 object-contain" />
+        </div>
+        <div>
+          <p class="text-sm font-semibold login-title">Associação das Residências</p>
+          <p class="text-xs login-muted">Painel administrativo</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="login-card" id="loginCard">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm login-muted">Acesso seguro</p>
+          <h2 class="mt-1 text-2xl font-semibold login-title">Entrar no sistema</h2>
+        </div>
+        <img src="/static/branding/ARCVSVERDE.png" alt="Logo ARCVS Verde" class="h-12 w-auto object-contain" />
+      </div>
+
+      {% set has_error = (error is defined and error) %}
+      {% if has_error %}
+        <div class="mt-4 login-alert" role="alert">
+          {{ error }}
+        </div>
+      {% endif %}
+
+      <form class="mt-6 grid gap-4" method="post" action="/login">
+        <div>
+          <label class="text-sm font-medium login-muted">E-mail</label>
+          <input name="email" type="email" required class="mt-2 login-input {% if has_error %}error{% endif %}" placeholder="seuemail@dominio.com" value="{{ email or '' }}" aria-invalid="{{ 'true' if has_error else 'false' }}" />
+        </div>
+        <div>
+          <label class="text-sm font-medium login-muted">Senha</label>
+          <input name="password" type="password" required class="mt-2 login-input {% if has_error %}error{% endif %}" placeholder="••••••••" aria-invalid="{{ 'true' if has_error else 'false' }}" />
+        </div>
+        <button class="login-btn ripple" type="submit">Entrar agora</button>
+      </form>
+
+      <div class="mt-5 text-xs login-muted">
+        Ao acessar, você confirma estar autorizado a operar o Painel Financeiro.
+      </div>
+    </div>
   </div>
-</div>
+</section>
+{% endblock %}
+
+{% block scripts_extra %}
+  <script>
+    (() => {
+      const card = document.getElementById('loginCard');
+      const stage = document.querySelector('.login-stage');
+      const orbs = document.querySelectorAll('.login-blur-orb');
+      let raf = null;
+      const onMove = (e) => {
+        if (!stage || !orbs.length) return;
+        const rect = stage.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width - 0.5;
+        const y = (e.clientY - rect.top) / rect.height - 0.5;
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          orbs.forEach((orb, i) => {
+            const factor = (i + 1) * 14;
+            orb.style.transform = `translate3d(${x * factor}px, ${y * factor}px, 0)`;
+          });
+        });
+      };
+      if (card && window.VanillaTilt) {
+        VanillaTilt.init(card, {
+          max: 4,
+          speed: 600,
+          glare: true,
+          "max-glare": 0.12
+        });
+      }
+      if (stage) {
+        stage.addEventListener('mousemove', onMove);
+        stage.addEventListener('mouseleave', () => {
+          orbs.forEach((orb) => (orb.style.transform = ''));
+        });
+      }
+      if (window.gsap) {
+        gsap.from(".login-brand", { opacity: 0, y: 22, duration: 0.7, ease: "power2.out" });
+        gsap.from(".login-card", { opacity: 0, y: 26, duration: 0.8, ease: "power2.out", delay: 0.08 });
+      }
+    })();
+  </script>
 {% endblock %}

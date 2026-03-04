@@ -9,9 +9,16 @@ from app.modules.conciliacao.service import statement_totals_for_competence
 from app.modules.lancamentos.service import totals_for_period, series_by_month
 from app.models.receber import Installment
 from app.models.boletos import Boleto
+from app.models.boletos_pagar import BoletoAPagar
+from app.models.boletos_receber import BoletoAReceber
 from app.models.saldo import BalanceAdjustment
 from app.models.customer import Customer
 from app.models.receber import Receivable
+
+
+def _is_paid_status(status: str | None) -> bool:
+    st = (status or "").upper().strip()
+    return ("PAG" in st) or ("BAIX" in st)
 
 
 def balance_adjustment_for_competence(db: Session, competence: str) -> float:
@@ -30,6 +37,14 @@ def prev_month(competence: str) -> str:
     d = dt.date(y, m, 1)
     prev = (d.replace(day=1) - dt.timedelta(days=1)).replace(day=1)
     return prev.strftime("%Y-%m")
+
+
+def next_month(competence: str) -> str:
+    """Retorna YYYY-MM posterior."""
+    y, m = [int(x) for x in competence.split("-")[:2]]
+    d = dt.date(y, m, 1)
+    nxt = (d + dt.timedelta(days=32)).replace(day=1)
+    return nxt.strftime("%Y-%m")
 
 
 def months_back_list(competence: str, n: int = 6) -> list[str]:
@@ -94,9 +109,10 @@ def boletos_stats_for_competence(db: Session, competence: str) -> dict:
     for (b, inst, rec, cust) in boletos:
         amt = float(b.amount or 0.0)
         status = (b.status or "").upper().strip()
+        is_paid = _is_paid_status(status)
         due = b.due_date
 
-        if status == "PAGA":
+        if is_paid:
             paid_total += amt
             paid_count += 1
         else:
@@ -137,6 +153,91 @@ def boletos_stats_for_competence(db: Session, competence: str) -> dict:
     }
 
 
+def boletos_pagar_stats_for_competence(db: Session, competence: str) -> dict:
+    """Resumo de boletos cadastrados (contas a pagar) da competência."""
+    today = dt.date.today()
+
+    rows = (
+        db.query(BoletoAPagar)
+        .filter(BoletoAPagar.competence_month == competence)
+        .order_by(BoletoAPagar.id.desc())
+        .all()
+    )
+
+    paid_total = paid_count = 0
+    pending_total = pending_count = 0
+    overdue_total = overdue_count = 0
+    due_soon_total = due_soon_count = 0
+
+    items: list[dict] = []
+    for b in rows:
+        st = (b.status or "A_VENCER").upper().strip()
+        is_paid = _is_paid_status(st)
+        due = b.due_date
+        amt = float(b.amount or 0.0)
+        overdue = bool(due and (not is_paid) and (due < today))
+        due_soon = bool(due and (not is_paid) and (0 <= (due - today).days <= 5))
+
+        if is_paid:
+            paid_total += amt
+            paid_count += 1
+        else:
+            pending_total += amt
+            pending_count += 1
+            if overdue:
+                overdue_total += amt
+                overdue_count += 1
+            if due_soon:
+                due_soon_total += amt
+                due_soon_count += 1
+
+        nf = b.nota_fiscal
+        items.append(
+            {
+                "id": b.id,
+                "beneficiario": b.beneficiario,
+                "descricao": b.descricao or "",
+                "due_date": b.due_date,
+                "amount": amt,
+                "status": st,
+                "paid_at": b.paid_at,
+                "nota_fiscal": (
+                    {
+                        "id": nf.id,
+                        "numero": nf.numero,
+                        "fornecedor": nf.fornecedor or "",
+                        "amount": float(nf.amount or 0.0),
+                    }
+                    if nf
+                    else None
+                ),
+                "overdue": overdue,
+                "due_soon": due_soon,
+            }
+        )
+
+    previstos = [x for x in items if (not _is_paid_status(str(x.get("status") or ""))) and (not bool(x.get("overdue")))]
+    pagos = [x for x in items if _is_paid_status(str(x.get("status") or ""))]
+    vencidos = [x for x in items if (not _is_paid_status(str(x.get("status") or ""))) and bool(x.get("overdue"))]
+
+    return {
+        "competence": competence,
+        "all": items,
+        "all_count": int(len(items)),
+        "paid_total": float(paid_total),
+        "paid_count": int(paid_count),
+        "pending_total": float(pending_total),
+        "pending_count": int(pending_count),
+        "overdue_total": float(overdue_total),
+        "overdue_count": int(overdue_count),
+        "due_soon_total": float(due_soon_total),
+        "due_soon_count": int(due_soon_count),
+        "previstos": previstos,
+        "pagos": pagos,
+        "vencidos": vencidos,
+    }
+
+
 
 
 def combined_totals_for_competence(db: Session, competence: str) -> dict:
@@ -169,6 +270,95 @@ def combined_totals_for_competence(db: Session, competence: str) -> dict:
         'statement_entradas': float(stmt.get('entradas') or 0.0),
         'statement_saidas': float(stmt.get('saidas') or 0.0),
         'statement_saldo': float(stmt.get('saldo') or 0.0),
+    }
+
+
+
+def boletos_receber_cadastro_stats_for_competence(db: Session, competence: str) -> dict:
+    """Totais e listas para boletos a receber cadastrados manualmente.
+
+    A prestação de contas precisa exibir TODOS os boletos (a vencer, vencidos e pagos),
+    além de permitir usar como checklist (marcar como PAGO).
+    """
+
+    import datetime
+
+    today = datetime.date.today()
+
+    rows = (
+        db.query(BoletoAReceber)
+        .filter(BoletoAReceber.competence_month == competence)
+        .order_by(BoletoAReceber.id.desc())
+        .all()
+    )
+
+    total = 0.0
+    paid_total = 0.0
+    overdue_total = 0.0
+    pending_total = 0.0
+
+    paid_count = 0
+    overdue_count = 0
+    pending_count = 0
+
+    items: list[dict] = []
+
+    for b in rows:
+        amount = float(b.amount or 0.0)
+        total += amount
+
+        st = (b.status or "A_VENCER").upper().strip()
+        is_paid = _is_paid_status(st)
+        due = b.due_date
+        is_overdue = bool(due and (not is_paid) and (due < today))
+        is_due_soon = bool(due and (not is_paid) and (0 <= (due - today).days <= 5))
+
+        if is_paid:
+            paid_total += amount
+            paid_count += 1
+        else:
+            pending_total += amount
+            pending_count += 1
+            if is_overdue:
+                overdue_total += amount
+                overdue_count += 1
+
+        items.append(
+            {
+                "id": b.id,
+                "customer_name": b.customer_name,
+                "customer_email": b.customer_email,
+                "description": b.description or "",
+                "due_date": b.due_date,
+                "amount": amount,
+                "status": st,
+                "paid_at": b.paid_at,
+                "overdue": is_overdue,
+                "due_soon": is_due_soon,
+            }
+        )
+
+    # Ordem por vencimento (mais antigo primeiro)
+    items = sorted(items, key=lambda x: (x["due_date"] or today, x["id"]))
+
+    previstos = [x for x in items if x.get("status") != "PAGO" and not x.get("overdue")]
+    vencidos = [x for x in items if x.get("status") != "PAGO" and x.get("overdue")]
+    pagos = [x for x in items if x.get("status") == "PAGO"]
+
+    return {
+        "competence": competence,
+        "all": items,
+        "all_count": int(len(items)),
+        "total": float(total),
+        "paid_total": float(paid_total),
+        "overdue_total": float(overdue_total),
+        "pending_total": float(pending_total),
+        "paid_count": int(paid_count),
+        "overdue_count": int(overdue_count),
+        "pending_count": int(pending_count),
+        "previstos": previstos,
+        "vencidos": vencidos,
+        "pagos": pagos,
     }
 
 
@@ -216,6 +406,12 @@ def prestacao_contas_data(db: Session, competence: str) -> dict:
         saldo_var_pct = (cur["saldo"] - prev_d["saldo"]) / prev_d["saldo"] * 100.0
 
     boletos = boletos_stats_for_competence(db, competence)
+    boletos_pagar = boletos_pagar_stats_for_competence(db, competence)
+    nxt = next_month(competence)
+    boletos_pagar_next = boletos_pagar_stats_for_competence(db, nxt)
+
+    boletos_receber_cadastro = boletos_receber_cadastro_stats_for_competence(db, competence)
+    boletos_receber_cadastro_next = boletos_receber_cadastro_stats_for_competence(db, nxt)
 
     # Série para gráfico (últimos 6 meses)
     labels = months_back_list(competence, n=6)
@@ -264,6 +460,10 @@ def prestacao_contas_data(db: Session, competence: str) -> dict:
         "saldo_var_pct": saldo_var_pct,
         "saldo_variations": saldo_variations,
         "boletos": boletos,
+        "boletos_pagar": boletos_pagar,
+        "boletos_pagar_next": boletos_pagar_next,
+        "boletos_receber_cadastro": boletos_receber_cadastro,
+        "boletos_receber_cadastro_next": boletos_receber_cadastro_next,
         "series": {
             "labels": labels,
             "entradas": entradas_series,

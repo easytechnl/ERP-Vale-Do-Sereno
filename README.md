@@ -47,7 +47,10 @@ python -m app.scripts.init_db
 ## 4) Rodar o servidor
 
 ```powershell
-python -m uvicorn app.main:app --reload
+py run_dev.py
+# (ou: python run_dev.py)
+# para porta customizada, ex.: 8010
+py run_dev.py --port 8010
 ```
 
 Acesse: `http://127.0.0.1:8000`
@@ -96,7 +99,7 @@ SELECT COUNT(*) FROM rateio_expenses;
 Se a pasta do projeto tiver espaço no nome, **não tem problema**, mas prefira sempre rodar:
 
 ```powershell
-python -m uvicorn app.main:app --reload
+py run_dev.py
 ```
 
-(Assim você não depende do executável `uvicorn.exe` dentro do venv.)
+(Esse entrypoint usa `if __name__ == "__main__"` e `freeze_support()` para evitar erro de spawn no Windows com `--reload`.)

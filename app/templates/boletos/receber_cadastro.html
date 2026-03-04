@@ -1,0 +1,230 @@
+{% extends "layout.html" %}
+{% set title = "Boletos a Receber (Cadastro)" %}
+{% set page_subtitle = "Cadastre boletos a receber manualmente e marque o status." %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="glass rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div class="text-lg font-semibold text-slate-900">Cadastro de boletos a receber</div>
+        <div class="text-sm text-slate-500">Competência: <b>{{ competence|competence_br }}</b></div>
+      </div>
+      <a href="/boletos?competence={{ competence }}" class="btn btn-secondary ripple">
+        <i data-lucide="barcode" class="h-4 w-4"></i>
+        Boletos (parcela)
+      </a>
+    </div>
+  </div>
+
+  <div class="grid gap-6 xl:grid-cols-12">
+    <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-4">
+      <div class="text-lg font-semibold text-slate-900">Cadastrar boleto a receber</div>
+      <form class="mt-4 space-y-3" method="post" action="/boletos/receber-cadastro/create">
+        <input type="hidden" name="competence" value="{{ competence }}" />
+
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Construtora (opcional)</label>
+          <select class="input" name="construtora_id" id="construtoraSelect">
+            <option value="">— selecionar construtora —</option>
+            {% for c in companies %}
+            <option value="{{ c.id }}" data-company-name="{{ c.name }}" data-company-email="{{ c.email }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Vincular boleto existente (opcional)</label>
+          <select class="input" name="source_boleto_id" id="sourceBoletoSelect">
+            <option value="">-- selecionar boleto --</option>
+            {% for b in linked_boletos %}
+            <option
+              value="{{ b.id }}"
+              data-customer-name="{{ b.customer_name }}"
+              data-customer-email="{{ b.customer_email }}"
+              data-due-date="{{ b.due_date.isoformat() if b.due_date else '' }}"
+              data-amount="{{ b.amount }}"
+              data-description="{{ b.description }}"
+              data-status="{{ b.status }}"
+            >
+              {{ b.customer_name }} - {{ b.nosso_numero or ('#' ~ b.id) }} - R$ {{ "%.2f"|format(b.amount or 0) }} - {{ b.due_date.strftime("%d/%m/%Y") if b.due_date else "s/ venc." }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="mt-1 text-xs text-slate-500">Ao selecionar, o sistema preenche vencimento, valor e cliente automaticamente.</div>
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Cliente</label>
+          <input class="input" name="customer_name" id="customerNameInput" required placeholder="Nome do cliente" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">E-mail (opcional)</label>
+          <input class="input" name="customer_email" id="customerEmailInput" placeholder="cliente@email.com" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Vencimento</label>
+          <input class="input" name="due_date" id="dueDateInput" type="date" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Valor (R$)</label>
+          <input class="input" name="amount" id="amountInput" type="number" step="0.01" min="0" required />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Descrição (opcional)</label>
+          <input class="input" name="description" id="descriptionInput" placeholder="Ex: Mensalidade / Taxa / Serviço" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Vincular Nota Fiscal (opcional)</label>
+          <select class="input" name="nota_fiscal_id">
+            <option value="">-- sem vinculo --</option>
+            {% for n in notas %}
+            <option value="{{ n.id }}">
+              NF {{ n.numero }}{% if n.fornecedor %} - {{ n.fornecedor }}{% endif %} - R$ {{ "%.2f"|format(n.amount or 0) }}
+            </option>
+            {% endfor %}
+          </select>
+          {% if not notas %}
+          <div class="mt-1 text-xs text-slate-500">Nenhuma nota fiscal cadastrada para esta competencia.</div>
+          {% endif %}
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Status</label>
+          <select class="input" name="status" id="statusSelect">
+            <option value="A_VENCER">A VENCER</option>
+            <option value="VENCIDO">VENCIDO</option>
+            <option value="PAGO">PAGO</option>
+          </select>
+        </div>
+
+        <button class="btn btn-primary ripple w-full bg-brandGreen">Cadastrar</button>
+      </form>
+    </div>
+
+    <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-8">
+      <div class="mb-4">
+        <div class="text-lg font-semibold text-slate-900">Boletos a receber cadastrados</div>
+        <div class="text-sm text-slate-500">Ao marcar como <b>PAGO</b>, o sistema cria automaticamente uma <b>ENTRADA</b> em Lançamentos.</div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="text-left">Cliente</th>
+              <th class="text-left">Descrição</th>
+              <th class="text-left">NF vinculada</th>
+              <th class="text-left">Vencimento</th>
+              <th class="text-left">Valor</th>
+              <th class="text-left">Status</th>
+              <th class="text-left"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            {% for b in items %}
+            <tr>
+              <td>
+                <div class="font-medium text-slate-900">{{ b.customer_name }}</div>
+                <form class="mt-1 flex items-center gap-2" method="post" action="/boletos/receber-cadastro/{{ b.id }}/email">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <input class="input h-9 min-w-[210px] text-xs" name="customer_email" type="email" value="{{ b.customer_email or '' }}" placeholder="email do cliente" />
+                  <button class="btn btn-secondary ripple !px-3 !py-1.5 !text-xs">
+                    <i data-lucide="mail-check" class="h-4 w-4"></i>
+                    Salvar e-mail
+                  </button>
+                </form>
+              </td>
+              <td>{{ b.description or "—" }}</td>
+              <td>
+                {% if b.nota_fiscal %}
+                NF {{ b.nota_fiscal.numero }}{% if b.nota_fiscal.fornecedor %} - {{ b.nota_fiscal.fornecedor }}{% endif %}
+                {% else %}
+                —
+                {% endif %}
+              </td>
+              <td>{{ b.due_date.strftime("%d/%m/%Y") if b.due_date else "—" }}</td>
+              <td class="font-semibold text-slate-900">R$ {{ "%.2f"|format(b.amount or 0) }}</td>
+              <td>
+                {% if b.status == "PAGO" %}
+                <span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">PAGO</span>
+                {% elif b.overdue %}
+                <span class="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">VENCIDO</span>
+                {% else %}
+                <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{{ b.status }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="flex flex-wrap gap-2">
+                  <form class="flex items-center gap-2" method="post" action="/boletos/receber-cadastro/{{ b.id }}/status">
+                    <input type="hidden" name="competence" value="{{ competence }}" />
+                    <select class="input min-w-[130px]" name="status">
+                      <option value="A_VENCER" {% if b.status == "A_VENCER" %}selected{% endif %}>A VENCER</option>
+                      <option value="VENCIDO" {% if b.status == "VENCIDO" %}selected{% endif %}>VENCIDO</option>
+                      <option value="PAGO" {% if b.status == "PAGO" %}selected{% endif %}>PAGO</option>
+                    </select>
+                    <button class="btn btn-secondary ripple">
+                      <i data-lucide="save" class="h-4 w-4"></i>
+                      Salvar
+                    </button>
+                  </form>
+                  <form method="post" action="/boletos/receber-cadastro/{{ b.id }}/delete" onsubmit="return confirm('Excluir este boleto?')">
+                    <input type="hidden" name="competence" value="{{ competence }}" />
+                    <button class="btn btn-secondary ripple">
+                      <i data-lucide="trash" class="h-4 w-4"></i>
+                      Excluir
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td class="py-6 text-center text-sm text-slate-500" colspan="7">Nenhum boleto cadastrado nesta competência.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const sel = document.getElementById("construtoraSelect");
+    const boletoSel = document.getElementById("sourceBoletoSelect");
+    const nameInput = document.getElementById("customerNameInput");
+    const emailInput = document.getElementById("customerEmailInput");
+    const dueInput = document.getElementById("dueDateInput");
+    const amountInput = document.getElementById("amountInput");
+    const descInput = document.getElementById("descriptionInput");
+    const statusSelect = document.getElementById("statusSelect");
+
+    if (sel && nameInput && emailInput) {
+      sel.addEventListener("change", () => {
+        const opt = sel.options[sel.selectedIndex];
+        const n = (opt?.dataset?.companyName || "").trim();
+        const e = (opt?.dataset?.companyEmail || "").trim();
+        if (n && !nameInput.value.trim()) nameInput.value = n;
+        if (e && !emailInput.value.trim()) emailInput.value = e;
+      });
+    }
+
+    if (boletoSel) {
+      boletoSel.addEventListener("change", () => {
+        const opt = boletoSel.options[boletoSel.selectedIndex];
+        const n = (opt?.dataset?.customerName || "").trim();
+        const e = (opt?.dataset?.customerEmail || "").trim();
+        const d = (opt?.dataset?.dueDate || "").trim();
+        const a = (opt?.dataset?.amount || "").trim();
+        const desc = (opt?.dataset?.description || "").trim();
+        const st = (opt?.dataset?.status || "").trim();
+
+        if (n) nameInput.value = n;
+        if (e) emailInput.value = e;
+        if (d && dueInput) dueInput.value = d;
+        if (a && amountInput) amountInput.value = a;
+        if (desc && descInput && !descInput.value.trim()) descInput.value = desc;
+        if (st && statusSelect) statusSelect.value = st;
+      });
+    }
+  })();
+</script>
+{% endblock %}

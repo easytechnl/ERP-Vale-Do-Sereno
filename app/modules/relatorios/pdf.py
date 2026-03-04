@@ -19,6 +19,8 @@ from reportlab.platypus import (
 )
 from reportlab.pdfgen import canvas
 
+from app.core.pdf_branding import header_footer_factory
+
 
 # =========================
 # Helpers (layout + format)
@@ -167,41 +169,7 @@ def _build_styles():
 
 
 def _header_footer(title: str, subtitle: str):
-    def _draw(canv: canvas.Canvas, doc):
-        canv.saveState()
-
-        # Header
-        x0 = doc.leftMargin
-        y_top = PAGE_H - doc.topMargin + 8 * mm
-
-        canv.setFillColor(INK)
-        canv.setFont("Helvetica-Bold", 12)
-        canv.drawString(x0, y_top, title)
-
-        canv.setFillColor(MUTED)
-        canv.setFont("Helvetica", 9)
-        canv.drawString(x0, y_top - 12, subtitle)
-
-        # Linha
-        canv.setStrokeColor(LINE)
-        canv.setLineWidth(0.8)
-        canv.line(x0, y_top - 18, PAGE_W - doc.rightMargin, y_top - 18)
-
-        # Footer
-        canv.setStrokeColor(LINE)
-        canv.setLineWidth(0.8)
-        canv.line(doc.leftMargin, doc.bottomMargin - 6, PAGE_W - doc.rightMargin, doc.bottomMargin - 6)
-
-        canv.setFillColor(MUTED)
-        canv.setFont("Helvetica", 8.5)
-        canv.drawString(doc.leftMargin, doc.bottomMargin - 18, f"Gerado em {_now_str()}")
-
-        page = canv.getPageNumber()
-        canv.drawRightString(PAGE_W - doc.rightMargin, doc.bottomMargin - 18, f"Página {page}")
-
-        canv.restoreState()
-
-    return _draw
+    return header_footer_factory(title=title, subtitle=subtitle)
 
 
 def _kpi_cards(styles, *, entradas: float, saidas: float, saldo: float) -> Table:
@@ -502,7 +470,11 @@ def generate_lancamentos_pdf(
         dt = str(r.get("entry_date", "") or "")
         comp = str(r.get("competence_month", "") or "")
         tipo = _kind_label(r.get("kind"))
-        desc = Paragraph(str(r.get("description", "") or ""), styles["Cell"])
+        desc_text = str(r.get("description", "") or "")
+        doc_no = str(r.get("document_number", "") or "").strip()
+        if doc_no:
+            desc_text = f"{desc_text} (Doc: {doc_no})"
+        desc = Paragraph(desc_text, styles["Cell"])
         status = str(r.get("status", "") or "")
         val = _as_float(r.get("amount"))
         body.append(

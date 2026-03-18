@@ -14,7 +14,6 @@ from app.models.receber import Installment, Receivable
 from app.models.customer import Customer
 from app.models.boletos_pagar import BoletoAPagar
 from app.models.boletos_receber import BoletoAReceber
-from app.models.notas_fiscais import NotaFiscal
 from app.models.rateio import RateioCompany
 from app.models.lancamentos import LedgerEntry
 from app.modules.lancamentos.service import create_entry
@@ -22,7 +21,6 @@ from app.modules.boletos.service import (
     generate_boletos_for_competence,
     generate_cnab_remittance,
     import_cnab_return,
-    ensure_boletos_receber_schema,
 )
 
 router = APIRouter(prefix="/boletos", tags=["boletos"])
@@ -260,7 +258,7 @@ async def api_importar_retorno(competence: str, file: UploadFile = File(...), us
 
 
 # =====================================================================
-# Boletos cadastrados (contas a pagar) + vínculo com Nota Fiscal
+# Boletos cadastrados (contas a pagar)
 # =====================================================================
 
 
@@ -307,15 +305,6 @@ def boletos_cadastro_page(
         .all()
     )
 
-    # notas da competência para o select
-    notas = (
-        db.query(NotaFiscal)
-        .filter(NotaFiscal.competence_month == competence)
-        .order_by(NotaFiscal.id.desc())
-        .all()
-    )
-    notas_ui = [{"id": n.id, "numero": n.numero, "fornecedor": n.fornecedor or "", "amount": float(n.amount or 0.0)} for n in notas]
-
     boletos = []
     for b in rows:
         due = b.due_date
@@ -323,7 +312,6 @@ def boletos_cadastro_page(
         is_paid = st == "PAGO"
         overdue = bool(due and (not is_paid) and (due < today))
         due_soon = bool(due and (not is_paid) and (0 <= (due - today).days <= 5))
-        nf = b.nota_fiscal
         boletos.append(
             {
                 "id": b.id,
@@ -335,17 +323,6 @@ def boletos_cadastro_page(
                 "paid_at": b.paid_at,
                 "barcode": b.barcode or "",
                 "digitable_line": b.digitable_line or "",
-                "nota_fiscal_id": b.nota_fiscal_id,
-                "nota_fiscal": (
-                    {
-                        "id": nf.id,
-                        "numero": nf.numero,
-                        "fornecedor": nf.fornecedor or "",
-                        "amount": float(nf.amount or 0.0),
-                    }
-                    if nf
-                    else None
-                ),
                 "overdue": overdue,
                 "due_soon": due_soon,
                 "notes": b.notes or "",
@@ -393,7 +370,6 @@ def boletos_cadastro_page(
             "boletos": visible,
             "stats": stats,
             "view": view,
-            "notas": notas_ui,
         },
     )
 
@@ -406,7 +382,6 @@ def boletos_cadastro_create(
     due_date: str = Form(""),
     amount: float = Form(...),
     status: str = Form("A_VENCER"),
-    nota_fiscal_id: str = Form(""),
     barcode: str = Form(""),
     digitable_line: str = Form(""),
     notes: str = Form(""),
@@ -414,7 +389,6 @@ def boletos_cadastro_create(
     db: Session = Depends(get_db),
 ):
     due = datetime.date.fromisoformat(due_date) if due_date.strip() else None
-    nf_id = int(nota_fiscal_id) if (nota_fiscal_id or "").strip().isdigit() else None
     st = _norm_status_pagar(status)
 
     b = BoletoAPagar(
@@ -425,7 +399,6 @@ def boletos_cadastro_create(
         amount=float(amount),
         status=st,
         paid_at=(datetime.date.today() if st == "PAGO" else None),
-        nota_fiscal_id=nf_id,
         barcode=(barcode.strip() or None),
         digitable_line=(digitable_line.strip() or None),
         notes=(notes.strip() or None),
@@ -442,8 +415,6 @@ def boletos_cadastro_create(
             desc = f"Boleto pago: {b.beneficiario}"
             if b.descricao:
                 desc = f"{desc} — {b.descricao}"
-            if b.nota_fiscal_id:
-                desc = f"{desc} (NF #{b.nota_fiscal_id})"
             create_entry(
                 db,
                 competence=b.competence_month,
@@ -492,8 +463,6 @@ def boletos_cadastro_update_status(
                 desc = f"Boleto pago: {b.beneficiario}"
                 if b.descricao:
                     desc = f"{desc} — {b.descricao}"
-                if b.nota_fiscal_id:
-                    desc = f"{desc} (NF #{b.nota_fiscal_id})"
                 create_entry(
                     db,
                     competence=b.competence_month,
@@ -538,8 +507,6 @@ def boletos_receber_cadastro_page(
 ):
     import datetime as _dt
 
-    ensure_boletos_receber_schema(db)
-
     company_emails = _load_company_emails()
     companies = (
         db.query(RateioCompany)
@@ -564,24 +531,12 @@ def boletos_receber_cadastro_page(
         due = b.due_date
         overdue = bool(due and (not is_paid) and (due < today))
         due_soon = bool(due and (not is_paid) and (0 <= (due - today).days <= 5))
-        nf = b.nota_fiscal
         items.append(
             {
                 "id": b.id,
                 "customer_name": b.customer_name,
                 "customer_email": b.customer_email,
                 "description": b.description or "",
-                "nota_fiscal_id": b.nota_fiscal_id,
-                "nota_fiscal": (
-                    {
-                        "id": nf.id,
-                        "numero": nf.numero,
-                        "fornecedor": nf.fornecedor or "",
-                        "amount": float(nf.amount or 0.0),
-                    }
-                    if nf
-                    else None
-                ),
                 "due_date": b.due_date,
                 "amount": float(b.amount or 0.0),
                 "status": st,
@@ -623,22 +578,6 @@ def boletos_receber_cadastro_page(
             }
         )
 
-    notas = (
-        db.query(NotaFiscal)
-        .filter(NotaFiscal.competence_month == competence)
-        .order_by(NotaFiscal.id.desc())
-        .all()
-    )
-    notas_ui = [
-        {
-            "id": n.id,
-            "numero": n.numero,
-            "fornecedor": n.fornecedor or "",
-            "amount": float(n.amount or 0.0),
-        }
-        for n in notas
-    ]
-
     return templates.TemplateResponse(
         "boletos/receber_cadastro.html",
         {
@@ -648,7 +587,6 @@ def boletos_receber_cadastro_page(
             "items": items,
             "companies": companies_ui,
             "linked_boletos": linked_boletos,
-            "notas": notas_ui,
         },
     )
 
@@ -658,7 +596,6 @@ def boletos_receber_cadastro_create(
     competence: str = Form(...),
     construtora_id: str = Form(""),
     source_boleto_id: str = Form(""),
-    nota_fiscal_id: str = Form(""),
     customer_name: str = Form(...),
     customer_email: str = Form(""),
     description: str = Form(""),
@@ -669,8 +606,6 @@ def boletos_receber_cadastro_create(
     db: Session = Depends(get_db),
 ):
     import datetime as _dt
-
-    ensure_boletos_receber_schema(db)
 
     selected_company = None
     company_email = ""
@@ -688,7 +623,6 @@ def boletos_receber_cadastro_create(
     resolved_due = (_dt.date.fromisoformat(due_date) if (due_date or "").strip() else None)
     resolved_amount = float(amount or 0.0)
     resolved_status = (status or "A_VENCER").upper().strip()
-    resolved_nf_id = int(nota_fiscal_id) if (nota_fiscal_id or "").strip().isdigit() else None
 
     linked = None
     if (source_boleto_id or "").strip().isdigit():
@@ -729,7 +663,6 @@ def boletos_receber_cadastro_create(
         customer_name=resolved_name,
         customer_email=(resolved_email or None),
         description=resolved_desc,
-        nota_fiscal_id=resolved_nf_id,
         due_date=resolved_due,
         amount=float(resolved_amount or 0.0),
         status=resolved_status,
@@ -771,8 +704,6 @@ def boletos_receber_cadastro_update_status(
     db: Session = Depends(get_db),
 ):
     import datetime as _dt
-
-    ensure_boletos_receber_schema(db)
 
     b = db.query(BoletoAReceber).filter(BoletoAReceber.id == boleto_id).first()
     if not b:
@@ -822,8 +753,6 @@ def boletos_receber_cadastro_delete(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    ensure_boletos_receber_schema(db)
-
     b = db.query(BoletoAReceber).filter(BoletoAReceber.id == boleto_id).first()
     if b:
         # Remove lançamento automático, se existir
@@ -845,8 +774,6 @@ def boletos_receber_cadastro_update_email(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    ensure_boletos_receber_schema(db)
-
     b = db.query(BoletoAReceber).filter(BoletoAReceber.id == boleto_id).first()
     if b:
         b.customer_email = (customer_email.strip() or None)

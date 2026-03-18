@@ -4,6 +4,8 @@ import io
 import json
 import glob
 import os
+import logging
+import re
 import shutil
 import subprocess
 from datetime import datetime, timedelta
@@ -12,7 +14,7 @@ from urllib.parse import urlparse, unquote, parse_qs
 from fastapi import APIRouter, Depends, Request, Form, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 
 from app.core.config import settings
 from app.core.deps import get_db
@@ -23,6 +25,7 @@ from app.models.audit import AuditLog
 from app.models.user import User
 
 router = APIRouter(prefix="/configuracoes", tags=["configuracoes"])
+logger = logging.getLogger(__name__)
 
 SETTINGS_PATH = Path("data/configuracoes.json")
 
@@ -111,6 +114,28 @@ def _parse_date(value: str | None) -> datetime | None:
         return datetime.strptime(value, "%Y-%m-%d")
     except Exception:
         return None
+
+
+def _normalize_competence(value: str | None) -> str | None:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+
+    m_ym = re.fullmatch(r"(\d{4})-(\d{2})", raw)
+    if m_ym:
+        year, month = m_ym.group(1), m_ym.group(2)
+        if 1 <= int(month) <= 12:
+            return f"{year}-{month}"
+        return None
+
+    m_my = re.fullmatch(r"(\d{2})/(\d{4})", raw)
+    if m_my:
+        month, year = m_my.group(1), m_my.group(2)
+        if 1 <= int(month) <= 12:
+            return f"{year}-{month}"
+        return None
+
+    return None
 
 
 def _sqlite_db_path() -> Path | None:
@@ -488,45 +513,54 @@ def cleanup_data(
     delete_installments: str | None = Form(None),
     delete_boletos_pagar: str | None = Form(None),
     delete_boletos_receber: str | None = Form(None),
-    delete_notas_fiscais: str | None = Form(None),
     delete_conciliacao: str | None = Form(None),
     delete_balance_adjustments: str | None = Form(None),
     delete_logs: str | None = Form(None),
     delete_reports: str | None = Form(None),
     delete_receivables_orphans: str | None = Form(None),
+    delete_email_history: str | None = Form(None),
     user=Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    comp = (competence or "").strip()
-    confirm_val = (confirm or "").strip().upper()
+    comp = _normalize_competence(competence)
+    confirm_val = " ".join((confirm or "").strip().upper().split())
+    if comp is None:
+        return RedirectResponse("/configuracoes?danger=err&reason=invalid_competence#limpeza", status_code=303)
+
     any_selected = any([
         delete_ledger,
         delete_boletos,
         delete_installments,
         delete_boletos_pagar,
         delete_boletos_receber,
-        delete_notas_fiscais,
         delete_conciliacao,
         delete_balance_adjustments,
         delete_logs,
         delete_reports,
         delete_receivables_orphans,
+        delete_email_history,
     ])
     if not any_selected:
-        return RedirectResponse("/configuracoes?danger=err#limpeza", status_code=303)
+        return RedirectResponse("/configuracoes?danger=err&reason=no_selection#limpeza", status_code=303)
 
     if comp:
-        if confirm_val != "EXCLUIR":
-            return RedirectResponse("/configuracoes?danger=err#limpeza", status_code=303)
+        if confirm_val not in {"EXCLUIR", "EXCLUIR TUDO"}:
+            return RedirectResponse("/configuracoes?danger=err&reason=confirm#limpeza", status_code=303)
     else:
         if confirm_val != "EXCLUIR TUDO":
-            return RedirectResponse("/configuracoes?danger=err#limpeza", status_code=303)
+            return RedirectResponse("/configuracoes?danger=err&reason=confirm#limpeza", status_code=303)
 
     try:
+        table_names = set(inspect(db.get_bind()).get_table_names())
+
+        def has_table(name: str) -> bool:
+            return name in table_names
+
         # Conciliação / extrato (OFX)
         if delete_conciliacao:
             if comp:
-                db.execute(text("""
+                if has_table("reconciliations") and has_table("bank_transactions") and has_table("bank_statement_imports"):
+                    db.execute(text("""
                     DELETE FROM reconciliations
                     WHERE bank_transaction_id IN (
                         SELECT bt.id FROM bank_transactions bt
@@ -534,22 +568,37 @@ def cleanup_data(
                         WHERE bi.competence_month = :c
                     )
                 """), {"c": comp})
-                db.execute(text("""
+                if has_table("bank_transactions") and has_table("bank_statement_imports"):
+                    db.execute(text("""
                     DELETE FROM bank_transactions
                     WHERE import_id IN (
                         SELECT id FROM bank_statement_imports WHERE competence_month = :c
                     )
                 """), {"c": comp})
-                db.execute(text("DELETE FROM bank_statement_imports WHERE competence_month = :c"), {"c": comp})
+                if has_table("bank_statement_imports"):
+                    db.execute(text("DELETE FROM bank_statement_imports WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM reconciliations"))
-                db.execute(text("DELETE FROM bank_transactions"))
-                db.execute(text("DELETE FROM bank_statement_imports"))
+                if has_table("reconciliations"):
+                    db.execute(text("DELETE FROM reconciliations"))
+                if has_table("bank_transactions"):
+                    db.execute(text("DELETE FROM bank_transactions"))
+                if has_table("bank_statement_imports"):
+                    db.execute(text("DELETE FROM bank_statement_imports"))
 
         # Boletos gerados / CNAB
         if delete_boletos:
             if comp:
-                db.execute(text("""
+                if has_table("email_reminder_logs") and has_table("boletos") and has_table("installments"):
+                    db.execute(text("""
+                    DELETE FROM email_reminder_logs
+                    WHERE boleto_id IN (
+                        SELECT b.id FROM boletos b
+                        JOIN installments i ON i.id = b.installment_id
+                        WHERE i.competence_month = :c
+                    )
+                """), {"c": comp})
+                if has_table("cnab_events") and has_table("boletos") and has_table("installments"):
+                    db.execute(text("""
                     DELETE FROM cnab_events
                     WHERE boleto_id IN (
                         SELECT b.id FROM boletos b
@@ -557,24 +606,41 @@ def cleanup_data(
                         WHERE i.competence_month = :c
                     )
                 """), {"c": comp})
-                db.execute(text("""
+                if has_table("boletos") and has_table("installments"):
+                    db.execute(text("""
                     DELETE FROM boletos
                     WHERE installment_id IN (
                         SELECT id FROM installments WHERE competence_month = :c
                     )
                 """), {"c": comp})
-                db.execute(text("DELETE FROM cnab_return_imports WHERE competence_month = :c"), {"c": comp})
-                db.execute(text("DELETE FROM cnab_remittances WHERE competence_month = :c"), {"c": comp})
+                if has_table("cnab_return_imports"):
+                    db.execute(text("DELETE FROM cnab_return_imports WHERE competence_month = :c"), {"c": comp})
+                if has_table("cnab_remittances"):
+                    db.execute(text("DELETE FROM cnab_remittances WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM cnab_events"))
-                db.execute(text("DELETE FROM boletos"))
-                db.execute(text("DELETE FROM cnab_return_imports"))
-                db.execute(text("DELETE FROM cnab_remittances"))
+                if has_table("email_reminder_logs"):
+                    db.execute(text("DELETE FROM email_reminder_logs"))
+                if has_table("cnab_events"):
+                    db.execute(text("DELETE FROM cnab_events"))
+                if has_table("boletos"):
+                    db.execute(text("DELETE FROM boletos"))
+                if has_table("cnab_return_imports"):
+                    db.execute(text("DELETE FROM cnab_return_imports"))
+                if has_table("cnab_remittances"):
+                    db.execute(text("DELETE FROM cnab_remittances"))
 
         # Parcelas/recebíveis
         if delete_installments:
             if comp:
-                db.execute(text("""
+                if has_table("email_reminder_logs") and has_table("installments"):
+                    db.execute(text("""
+                    DELETE FROM email_reminder_logs
+                    WHERE installment_id IN (
+                        SELECT id FROM installments WHERE competence_month = :c
+                    )
+                """), {"c": comp})
+                if has_table("cnab_events") and has_table("boletos") and has_table("installments"):
+                    db.execute(text("""
                     DELETE FROM cnab_events
                     WHERE boleto_id IN (
                         SELECT b.id FROM boletos b
@@ -582,20 +648,28 @@ def cleanup_data(
                         WHERE i.competence_month = :c
                     )
                 """), {"c": comp})
-                db.execute(text("""
+                if has_table("boletos") and has_table("installments"):
+                    db.execute(text("""
                     DELETE FROM boletos
                     WHERE installment_id IN (
                         SELECT id FROM installments WHERE competence_month = :c
                     )
                 """), {"c": comp})
-                db.execute(text("DELETE FROM installments WHERE competence_month = :c"), {"c": comp})
+                if has_table("installments"):
+                    db.execute(text("DELETE FROM installments WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM cnab_events"))
-                db.execute(text("DELETE FROM boletos"))
-                db.execute(text("DELETE FROM installments"))
+                if has_table("email_reminder_logs"):
+                    db.execute(text("DELETE FROM email_reminder_logs"))
+                if has_table("cnab_events"):
+                    db.execute(text("DELETE FROM cnab_events"))
+                if has_table("boletos"):
+                    db.execute(text("DELETE FROM boletos"))
+                if has_table("installments"):
+                    db.execute(text("DELETE FROM installments"))
 
         if delete_receivables_orphans:
-            db.execute(text("""
+            if has_table("receivables") and has_table("installments"):
+                db.execute(text("""
                 DELETE FROM receivables
                 WHERE id NOT IN (SELECT DISTINCT receivable_id FROM installments)
             """))
@@ -603,66 +677,104 @@ def cleanup_data(
         # Boletos a pagar / receber (cadastros manuais)
         if delete_boletos_pagar:
             if comp:
-                db.execute(text("DELETE FROM boletos_a_pagar WHERE competence_month = :c"), {"c": comp})
+                if has_table("boletos_a_pagar"):
+                    db.execute(text("DELETE FROM boletos_a_pagar WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM boletos_a_pagar"))
+                if has_table("boletos_a_pagar"):
+                    db.execute(text("DELETE FROM boletos_a_pagar"))
+
         if delete_boletos_receber:
             if comp:
-                db.execute(text("DELETE FROM boletos_a_receber WHERE competence_month = :c"), {"c": comp})
+                if has_table("boletos_a_receber"):
+                    db.execute(text("DELETE FROM boletos_a_receber WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM boletos_a_receber"))
-
-        # Notas fiscais (desvincula boletos a pagar antes)
-        if delete_notas_fiscais:
-            if comp:
-                db.execute(text("""
-                    UPDATE boletos_a_pagar
-                    SET nota_fiscal_id = NULL
-                    WHERE nota_fiscal_id IN (
-                        SELECT id FROM notas_fiscais WHERE competence_month = :c
-                    )
-                """), {"c": comp})
-                db.execute(text("DELETE FROM notas_fiscais WHERE competence_month = :c"), {"c": comp})
-            else:
-                db.execute(text("UPDATE boletos_a_pagar SET nota_fiscal_id = NULL"))
-                db.execute(text("DELETE FROM notas_fiscais"))
+                if has_table("boletos_a_receber"):
+                    db.execute(text("DELETE FROM boletos_a_receber"))
 
         # Lançamentos financeiros
         if delete_ledger:
             if comp:
-                db.execute(text("DELETE FROM ledger_entries WHERE competence_month = :c"), {"c": comp})
+                if has_table("ledger_entries"):
+                    db.execute(text("DELETE FROM ledger_entries WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM ledger_entries"))
+                if has_table("ledger_entries"):
+                    db.execute(text("DELETE FROM ledger_entries"))
 
         # Ajustes de saldo (prestação de contas)
         if delete_balance_adjustments:
             if comp:
-                db.execute(text("DELETE FROM balance_adjustments WHERE competence_month = :c"), {"c": comp})
+                if has_table("balance_adjustments"):
+                    db.execute(text("DELETE FROM balance_adjustments WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM balance_adjustments"))
+                if has_table("balance_adjustments"):
+                    db.execute(text("DELETE FROM balance_adjustments"))
 
         # Logs do sistema
         if delete_logs:
-            db.execute(text("DELETE FROM audit_logs"))
+            if has_table("audit_log"):
+                db.execute(text("DELETE FROM audit_log"))
 
         # Relatórios / fechamentos
         if delete_reports:
             if comp:
-                db.execute(text("""
+                if has_table("report_snapshots") and has_table("monthly_closes"):
+                    db.execute(text("""
                     DELETE FROM report_snapshots
                     WHERE monthly_close_id IN (
                         SELECT id FROM monthly_closes WHERE competence_month = :c
                     )
                 """), {"c": comp})
-                db.execute(text("DELETE FROM monthly_closes WHERE competence_month = :c"), {"c": comp})
+                if has_table("monthly_closes"):
+                    db.execute(text("DELETE FROM monthly_closes WHERE competence_month = :c"), {"c": comp})
             else:
-                db.execute(text("DELETE FROM report_snapshots"))
-                db.execute(text("DELETE FROM monthly_closes"))
+                if has_table("report_snapshots"):
+                    db.execute(text("DELETE FROM report_snapshots"))
+                if has_table("monthly_closes"):
+                    db.execute(text("DELETE FROM monthly_closes"))
+
+        # Histórico de e-mails/lembretes
+        if delete_email_history:
+            if comp:
+                if has_table("email_attachments") and has_table("email_messages") and has_table("email_batches"):
+                    db.execute(text("""
+                        DELETE FROM email_attachments
+                        WHERE email_message_id IN (
+                            SELECT em.id FROM email_messages em
+                            JOIN email_batches eb ON eb.id = em.batch_id
+                            WHERE eb.competence_month = :c
+                        )
+                    """), {"c": comp})
+                if has_table("email_messages") and has_table("email_batches"):
+                    db.execute(text("""
+                        DELETE FROM email_messages
+                        WHERE batch_id IN (
+                            SELECT id FROM email_batches WHERE competence_month = :c
+                        )
+                    """), {"c": comp})
+                if has_table("email_batches"):
+                    db.execute(text("DELETE FROM email_batches WHERE competence_month = :c"), {"c": comp})
+                if has_table("email_reminder_logs") and has_table("installments"):
+                    db.execute(text("""
+                        DELETE FROM email_reminder_logs
+                        WHERE installment_id IN (
+                            SELECT id FROM installments WHERE competence_month = :c
+                        )
+                    """), {"c": comp})
+            else:
+                if has_table("email_attachments"):
+                    db.execute(text("DELETE FROM email_attachments"))
+                if has_table("email_messages"):
+                    db.execute(text("DELETE FROM email_messages"))
+                if has_table("email_batches"):
+                    db.execute(text("DELETE FROM email_batches"))
+                if has_table("email_reminder_logs"):
+                    db.execute(text("DELETE FROM email_reminder_logs"))
 
         db.commit()
     except Exception:
         db.rollback()
-        return RedirectResponse("/configuracoes?danger=err#limpeza", status_code=303)
+        logger.exception("Falha na limpeza de dados. competencia=%s", comp or "ALL")
+        return RedirectResponse("/configuracoes?danger=err&reason=execution#limpeza", status_code=303)
 
     return RedirectResponse("/configuracoes?danger=ok#limpeza", status_code=303)
 

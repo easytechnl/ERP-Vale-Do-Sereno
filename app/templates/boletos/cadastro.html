@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% set title = "Boletos (Cadastro)" %}
-{% set page_subtitle = "Cadastre boletos a pagar e vincule com uma Nota Fiscal." %}
+{% set page_subtitle = "Cadastre boletos a pagar e acompanhe o status." %}
 
 {% block content %}
 <div class="space-y-6">
@@ -75,15 +75,6 @@
           <input class="input" name="descricao" placeholder="Ex: Energia elétrica - sede" />
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-slate-600">Vincular Nota Fiscal (opcional)</label>
-          <select class="input" name="nota_fiscal_id">
-            <option value="">— não vincular —</option>
-            {% for nf in notas %}
-            <option value="{{ nf.id }}">NF {{ nf.numero }} — {{ nf.fornecedor }} (R$ {{ "%.2f"|format(nf.amount) }})</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
           <label class="mb-1 block text-xs font-medium text-slate-600">Linha digitável / código de barras (opcional)</label>
           <input class="input" name="digitable_line" placeholder="Linha digitável" />
         </div>
@@ -102,7 +93,6 @@
           <div class="text-lg font-semibold text-slate-900">Boletos cadastrados</div>
           <div class="text-sm text-slate-500">Visíveis: <b>{{ boletos|length }}</b></div>
         </div>
-        <a class="text-sm text-brandGreen underline" href="/notas-fiscais?competence={{ competence }}">Ir para Notas Fiscais</a>
       </div>
 
       <div class="overflow-x-auto">
@@ -110,7 +100,6 @@
           <thead class="bg-slate-50">
             <tr>
               <th class="text-left">Boleto</th>
-              <th class="text-left">NF vinculada</th>
               <th class="text-left">Vencimento</th>
               <th class="text-left">Valor</th>
               <th class="text-left">Status</th>
@@ -123,14 +112,6 @@
               <td>
                 <div class="font-medium text-slate-900">{{ b.beneficiario }}</div>
                 <div class="text-xs text-slate-500">{{ b.descricao or "—" }}</div>
-              </td>
-              <td>
-                {% if b.nota_fiscal %}
-                <div>NF {{ b.nota_fiscal.numero }}</div>
-                <div class="text-xs text-slate-500">{{ b.nota_fiscal.fornecedor }}</div>
-                {% else %}
-                —
-                {% endif %}
               </td>
               <td>
                 {{ b.due_date.strftime("%d/%m/%Y") if b.due_date else "—" }}
@@ -161,7 +142,7 @@
             {% endfor %}
             {% if boletos|length == 0 %}
             <tr>
-              <td class="py-6 text-center text-sm text-slate-500" colspan="6">Nenhum boleto cadastrado para esta competência.</td>
+              <td class="py-6 text-center text-sm text-slate-500" colspan="5">Nenhum boleto cadastrado para esta competência.</td>
             </tr>
             {% endif %}
           </tbody>

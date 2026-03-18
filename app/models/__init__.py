@@ -12,9 +12,9 @@ from app.models.lancamentos import LedgerEntry
 from app.models.lancamento_refs import LedgerCategory, LedgerCostCenter
 from app.models.rateio import RateioCompany, RateioExpense
 from app.models.saldo import BalanceAdjustment
+from app.models.investimentos import InvestmentAccount, InvestmentEntry
 
-# Contas a pagar (Notas fiscais / boletos cadastrados)
-from app.models.notas_fiscais import NotaFiscal
+# Contas a pagar (boletos cadastrados)
 from app.models.boletos_pagar import BoletoAPagar
 
 

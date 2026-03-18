@@ -1,0 +1,504 @@
+{% extends "layout.html" %}
+{% set title = "Investimentos" %}
+{% set page_subtitle = "Contas de investimento separadas do saldo operacional, com rendimento manual e relatorio por periodo." %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+  <div class="glass p-6">
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div>
+        <div class="text-sm text-slate-600">Competencia analisada</div>
+        <div class="mt-1 text-3xl font-semibold">{{ competence|competence_br }}</div>
+        <div class="mt-2 text-sm text-slate-600">
+          Escopo: <b>{{ summary.scope }}</b>
+          <span class="mx-2">|</span>
+          Este modulo nao entra no saldo do painel principal.
+        </div>
+      </div>
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div class="font-semibold">Patrimonio em investimento</div>
+        <div class="mt-1 text-2xl font-semibold">R$ {{ summary.saldo|brl }}</div>
+        <div class="mt-1 text-xs text-emerald-800">
+          Variacao no mes:
+          <b class="{% if summary.delta >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">
+            R$ {{ summary.delta|brl }}
+          </b>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Contas consideradas</div>
+        <div class="mt-1 text-xl font-semibold">{{ summary.accounts_count }}</div>
+        <div class="mt-1 text-[11px] text-slate-500">Ativas no sistema: {{ summary.active_accounts }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Aportes do mes</div>
+        <div class="mt-1 text-xl font-semibold text-slate-900">R$ {{ summary.aportes|brl }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Resgates do mes</div>
+        <div class="mt-1 text-xl font-semibold text-rose-700">R$ {{ summary.resgates|brl }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Rendimento manual</div>
+        <div class="mt-1 text-xl font-semibold text-emerald-700">R$ {{ summary.rendimentos|brl }}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Ajustes do mes</div>
+        <div class="mt-1 text-xl font-semibold {% if summary.ajustes >= 0 %}text-sky-700{% else %}text-amber-700{% endif %}">
+          R$ {{ summary.ajustes|brl }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if ok %}
+    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{{ ok }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">{{ error }}</div>
+  {% endif %}
+
+  <form class="glass p-6" method="get" action="/investimentos">
+    <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div>
+        <label class="text-sm text-slate-600">Competencia</label>
+        <input type="month" name="competence" value="{{ competence }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
+      </div>
+      <div>
+        <label class="text-sm text-slate-600">Conta</label>
+        <select name="account_id" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <option value="">Todas as contas</option>
+          {% for account in accounts %}
+            <option value="{{ account.id }}" {% if filters.account_id == account.id %}selected{% endif %}>
+              {{ account.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-slate-600">Tipo de movimento</label>
+        <select name="kind" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <option value="">Todos</option>
+          {% for kind_key, label in kind_labels.items() %}
+            <option value="{{ kind_key }}" {% if filters.kind == kind_key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-slate-600">Janela do relatorio</label>
+        <select name="months" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <option value="1" {% if filters.months == 1 %}selected{% endif %}>1 mes</option>
+          <option value="3" {% if filters.months == 3 %}selected{% endif %}>3 meses</option>
+          <option value="6" {% if filters.months == 6 %}selected{% endif %}>6 meses</option>
+          <option value="12" {% if filters.months == 12 %}selected{% endif %}>12 meses</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-slate-600">Busca</label>
+        <input name="q" value="{{ filters.q or '' }}" placeholder="Conta, descricao ou referencia" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
+      </div>
+    </div>
+    <div class="mt-4 flex flex-wrap justify-end gap-2">
+      <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50" href="/investimentos?competence={{ competence }}&months={{ filters.months }}">Limpar</a>
+      <button class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90" type="submit">Atualizar painel</button>
+    </div>
+  </form>
+
+  <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+    <div class="flex flex-col gap-6">
+      <div id="contas" class="glass p-6">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-semibold">Contas de investimento</div>
+            <div class="mt-1 text-xs text-slate-500">Cadastre contas separadas do caixa principal.</div>
+          </div>
+          {% if selected_account %}
+            <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-slate-50" href="/investimentos?competence={{ competence }}&months={{ filters.months }}">
+              Ver todas
+            </a>
+          {% endif %}
+        </div>
+
+        <form class="mt-4 grid gap-3" method="post" action="/investimentos/contas">
+          <input type="hidden" name="competence" value="{{ competence }}" />
+          <input type="hidden" name="months" value="{{ filters.months }}" />
+          <input name="name" placeholder="Nome da conta" class="rounded-xl border border-slate-200 bg-white px-3 py-2" required />
+          <div class="grid grid-cols-2 gap-2">
+            <input name="institution" placeholder="Instituicao" class="rounded-xl border border-slate-200 bg-white px-3 py-2" />
+            <input name="account_number" placeholder="Numero/identificacao" class="rounded-xl border border-slate-200 bg-white px-3 py-2" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs text-slate-500">Saldo inicial</label>
+              <input type="number" step="0.01" name="opening_balance" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value="0" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Data de abertura</label>
+              <input type="date" name="opening_date" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
+            </div>
+          </div>
+          <textarea name="notes" rows="3" placeholder="Observacoes da conta" class="rounded-xl border border-slate-200 bg-white px-3 py-2"></textarea>
+          <button class="rounded-xl bg-slate-900 px-4 py-2.5 text-white hover:opacity-90" type="submit">Salvar conta</button>
+        </form>
+
+        <div class="mt-5 space-y-3">
+          {% for item in positions %}
+            <div class="rounded-2xl border {% if filters.account_id == item.account.id %}border-emerald-300 bg-emerald-50/70{% else %}border-slate-200 bg-white{% endif %} p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="text-sm font-semibold text-slate-900">{{ item.account.name }}</div>
+                  <div class="mt-1 text-xs text-slate-500">
+                    {{ item.account.institution or 'Instituicao nao informada' }}
+                    {% if item.account.account_number %} | {{ item.account.account_number }}{% endif %}
+                  </div>
+                </div>
+                <span class="inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold {% if item.account.is_active %}bg-emerald-100 text-emerald-800{% else %}bg-slate-100 text-slate-700{% endif %}">
+                  {{ 'Ativa' if item.account.is_active else 'Inativa' }}
+                </span>
+              </div>
+              <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div class="text-xs text-slate-500">Saldo acumulado</div>
+                  <div class="mt-1 font-semibold">R$ {{ item.balance|brl }}</div>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div class="text-xs text-slate-500">Rendimento do mes</div>
+                  <div class="mt-1 font-semibold text-emerald-700">R$ {{ item.monthly.rendimentos|brl }}</div>
+                </div>
+              </div>
+              <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <div>
+                  Delta do mes:
+                  <b class="{% if item.delta >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">R$ {{ item.delta|brl }}</b>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <a class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold hover:bg-slate-50" href="/investimentos?competence={{ competence }}&months={{ filters.months }}&account_id={{ item.account.id }}">
+                    Filtrar
+                  </a>
+                  <form method="post" action="/investimentos/contas/{{ item.account.id }}/toggle">
+                    <input type="hidden" name="competence" value="{{ competence }}" />
+                    <input type="hidden" name="months" value="{{ filters.months }}" />
+                    <button class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold hover:bg-slate-50" type="submit">
+                      {{ 'Desativar' if item.account.is_active else 'Ativar' }}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {% else %}
+            <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              Nenhuma conta de investimento cadastrada ainda. Crie a primeira conta para registrar aportes, resgates e rendimentos.
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div id="movimentos" class="glass p-6">
+        <div class="text-sm font-semibold">Novo movimento</div>
+        <div class="mt-1 text-xs text-slate-500">Use rendimento para registrar o quanto a aplicacao rendeu manualmente no periodo.</div>
+
+        {% if accounts|length > 0 %}
+          <form class="mt-4 grid gap-3" method="post" action="/investimentos/movimentos">
+            <input type="hidden" name="competence" value="{{ competence }}" />
+            <input type="hidden" name="months" value="{{ filters.months }}" />
+            {% if filters.account_id %}
+              <input type="hidden" name="filter_account_id" value="{{ filters.account_id }}" />
+            {% endif %}
+            {% if filters.kind %}
+              <input type="hidden" name="filter_kind" value="{{ filters.kind }}" />
+            {% endif %}
+            {% if filters.q %}
+              <input type="hidden" name="filter_q" value="{{ filters.q }}" />
+            {% endif %}
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-xs text-slate-500">Conta</label>
+                <select name="investment_account_id" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required>
+                  {% for account in accounts %}
+                    <option value="{{ account.id }}" {% if selected_account and selected_account.id == account.id %}selected{% endif %}>{{ account.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Tipo</label>
+                <select name="kind" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required>
+                  {% for kind_key, label in kind_labels.items() %}
+                    <option value="{{ kind_key }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-xs text-slate-500">Data</label>
+                <input type="date" name="entry_date" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required />
+              </div>
+              <div>
+                <label class="text-xs text-slate-500">Valor</label>
+                <input type="number" step="0.01" name="amount" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required />
+              </div>
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-500">Descricao</label>
+              <input name="description" placeholder="Ex.: rendimento aplicado no fechamento do mes" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" required />
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-500">Referencia do rendimento (opcional)</label>
+              <input type="month" name="reference_month" value="{{ competence }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
+            </div>
+
+            <div>
+              <label class="text-xs text-slate-500">Observacoes</label>
+              <textarea name="notes" rows="3" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="Detalhes adicionais do movimento"></textarea>
+            </div>
+
+            <button class="rounded-xl bg-slate-900 px-4 py-2.5 text-white hover:opacity-90" type="submit">Salvar movimento</button>
+          </form>
+        {% else %}
+          <div class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+            Cadastre ao menos uma conta para liberar os lancamentos do modulo.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-6 xl:col-span-2">
+      <div class="glass p-6">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div class="text-sm font-semibold">Relatorio do periodo</div>
+            <div class="mt-1 text-xs text-slate-500">
+              Janela: {{ report.start|competence_br }} ate {{ report.end|competence_br }}.
+              {% if selected_account %}Conta filtrada: <b>{{ selected_account.name }}</b>.{% else %}Todas as contas selecionadas no modulo.{% endif %}
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <a class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50" href="/investimentos/relatorio.csv?end={{ competence }}&months={{ filters.months }}{% if filters.account_id %}&account_id={{ filters.account_id }}{% endif %}">
+              Baixar CSV
+            </a>
+            <a class="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:opacity-90" href="/investimentos/relatorio.pdf?end={{ competence }}&months={{ filters.months }}{% if filters.account_id %}&account_id={{ filters.account_id }}{% endif %}">
+              Baixar PDF
+            </a>
+          </div>
+        </div>
+
+        {% if report.series %}
+          <div class="mt-5 min-h-[280px]">
+            <canvas id="investmentChart" height="140"></canvas>
+          </div>
+        {% else %}
+          <div class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+            Ainda nao ha dados suficientes para montar o relatorio do periodo selecionado.
+          </div>
+        {% endif %}
+
+        <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50 text-left text-slate-500">
+              <tr>
+                <th class="px-3 py-2.5">Competencia</th>
+                <th class="px-3 py-2.5 text-right">Aportes</th>
+                <th class="px-3 py-2.5 text-right">Resgates</th>
+                <th class="px-3 py-2.5 text-right">Rendimentos</th>
+                <th class="px-3 py-2.5 text-right">Ajustes</th>
+                <th class="px-3 py-2.5 text-right">Saldo final</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in report.series %}
+                <tr class="border-t border-slate-200/70 hover:bg-slate-50/60">
+                  <td class="px-3 py-2.5 font-medium text-slate-900">{{ row.competence|competence_br }}</td>
+                  <td class="px-3 py-2.5 text-right">R$ {{ row.aportes|brl }}</td>
+                  <td class="px-3 py-2.5 text-right text-rose-700">R$ {{ row.resgates|brl }}</td>
+                  <td class="px-3 py-2.5 text-right text-emerald-700">R$ {{ row.rendimentos|brl }}</td>
+                  <td class="px-3 py-2.5 text-right {% if row.ajustes >= 0 %}text-sky-700{% else %}text-amber-700{% endif %}">R$ {{ row.ajustes|brl }}</td>
+                  <td class="px-3 py-2.5 text-right font-semibold">R$ {{ row.saldo|brl }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td class="px-3 py-3 text-slate-500" colspan="6">Sem dados para o periodo.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="glass p-6">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-semibold">Movimentos da competencia</div>
+            <div class="mt-1 text-xs text-slate-500">{{ entries|length }} registro(s) encontrados no filtro.</div>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="text-left text-slate-500">
+              <tr>
+                <th class="py-2 pr-4">Data</th>
+                <th class="py-2 pr-4">Conta</th>
+                <th class="py-2 pr-4">Tipo</th>
+                <th class="py-2 pr-4">Descricao</th>
+                <th class="py-2 pr-4">Referencia</th>
+                <th class="py-2 pr-4 text-right">Valor</th>
+                <th class="py-2 text-right">Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in entries %}
+                {% set signed_value = (entry.amount if entry.kind != 'RESGATE' else (entry.amount * -1)) %}
+                <tr class="border-t border-slate-200/70">
+                  <td class="py-2 pr-4 whitespace-nowrap">{{ entry.entry_date.strftime("%d/%m/%Y") if entry.entry_date else "-" }}</td>
+                  <td class="py-2 pr-4 font-medium">{{ entry.account.name if entry.account else "-" }}</td>
+                  <td class="py-2 pr-4">
+                    {% if entry.kind == 'APORTE' %}
+                      <span class="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-800">Aporte</span>
+                    {% elif entry.kind == 'RESGATE' %}
+                      <span class="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-800">Resgate</span>
+                    {% elif entry.kind == 'RENDIMENTO' %}
+                      <span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">Rendimento</span>
+                    {% else %}
+                      <span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Ajuste</span>
+                    {% endif %}
+                  </td>
+                  <td class="py-2 pr-4">
+                    <div class="font-medium text-slate-900">{{ entry.description }}</div>
+                    <div class="text-xs text-slate-500">{{ entry.notes or '-' }}</div>
+                  </td>
+                  <td class="py-2 pr-4">{{ entry.reference_month|competence_br if entry.reference_month else '-' }}</td>
+                  <td class="py-2 pr-4 text-right {% if signed_value >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">
+                    R$ {{ signed_value|brl }}
+                  </td>
+                  <td class="py-2 text-right">
+                    <form method="post" action="/investimentos/movimentos/{{ entry.id }}/delete" onsubmit="return confirm('Excluir este movimento?');">
+                      <input type="hidden" name="competence" value="{{ competence }}" />
+                      <input type="hidden" name="months" value="{{ filters.months }}" />
+                      {% if filters.account_id %}
+                        <input type="hidden" name="account_id" value="{{ filters.account_id }}" />
+                      {% endif %}
+                      {% if filters.kind %}
+                        <input type="hidden" name="kind" value="{{ filters.kind }}" />
+                      {% endif %}
+                      {% if filters.q %}
+                        <input type="hidden" name="q" value="{{ filters.q }}" />
+                      {% endif %}
+                      <button class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100" type="submit">
+                        Excluir
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td class="py-3 text-slate-500" colspan="7">Nenhum movimento na competencia com os filtros atuais.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+  (() => {
+    const movementDate = document.querySelector('input[name="entry_date"]');
+    if (movementDate && !movementDate.value) movementDate.value = new Date().toISOString().slice(0, 10);
+
+    const openingDate = document.querySelector('input[name="opening_date"]');
+    if (openingDate && !openingDate.value) openingDate.value = new Date().toISOString().slice(0, 10);
+
+    const chartCanvas = document.getElementById('investmentChart');
+    if (!chartCanvas || !window.Chart) return;
+
+    const series = {{ report.series|tojson }};
+    if (!series || !series.length) return;
+
+    const labels = series.map((row) => row.competence || '');
+    const aportes = series.map((row) => Number(row.aportes || 0));
+    const resgates = series.map((row) => Number(row.resgates || 0));
+    const rendimentos = series.map((row) => Number(row.rendimentos || 0));
+    const saldo = series.map((row) => Number(row.saldo || 0));
+    const ctx = chartCanvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 180);
+    gradient.addColorStop(0, 'rgba(16,185,129,.35)');
+    gradient.addColorStop(1, 'rgba(16,185,129,0)');
+
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Aportes',
+            data: aportes,
+            backgroundColor: 'rgba(14,165,233,.35)',
+            borderColor: 'rgba(14,165,233,1)',
+            borderWidth: 1.4,
+            borderRadius: 8
+          },
+          {
+            label: 'Resgates',
+            data: resgates,
+            backgroundColor: 'rgba(244,63,94,.35)',
+            borderColor: 'rgba(244,63,94,1)',
+            borderWidth: 1.4,
+            borderRadius: 8
+          },
+          {
+            label: 'Rendimentos',
+            data: rendimentos,
+            backgroundColor: 'rgba(16,185,129,.42)',
+            borderColor: 'rgba(16,185,129,1)',
+            borderWidth: 1.4,
+            borderRadius: 8
+          },
+          {
+            label: 'Saldo final',
+            data: saldo,
+            type: 'line',
+            tension: 0.35,
+            borderColor: 'rgba(15,23,42,1)',
+            backgroundColor: gradient,
+            fill: true,
+            pointRadius: 3,
+            pointHoverRadius: 5
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: true, position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: R$ ${Number(ctx.parsed.y || 0).toFixed(2)}`
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: {
+            ticks: {
+              callback: (value) => `R$ ${value}`
+            }
+          }
+        }
+      }
+    });
+  })();
+</script>
+{% endblock %}

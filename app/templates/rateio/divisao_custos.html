@@ -37,6 +37,20 @@
       </div>
     </form>
 
+    {% set gerar_boletos_status = request.query_params.get('gerar_boletos') %}
+    {% if gerar_boletos_status == 'ok' %}
+      <div class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        Contas a receber geradas com sucesso.
+        Criados: <b>{{ request.query_params.get('created') or '0' }}</b> |
+        Atualizados: <b>{{ request.query_params.get('updated') or '0' }}</b> |
+        Ignorados: <b>{{ request.query_params.get('skipped') or '0' }}</b>.
+      </div>
+    {% elif gerar_boletos_status == 'empty' %}
+      <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Nenhuma construtora elegível para gerar boletos nesta competência.
+      </div>
+    {% endif %}
+
     {% set total_base = (preview.companies | sum(attribute='valor_base')) if preview and preview.companies else 0 %}
     {% set total_reserva = (preview.total_reserva or 0) if preview else 0 %}
     {% set total_final = (preview.total_com_reserva or 0) if preview else 0 %}
@@ -171,6 +185,24 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <form class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3" method="post" action="/divisao-custos/salvar" onsubmit="return confirm('Gerar/atualizar contas a receber para todas as construtoras desta competência?')">
+      <input type="hidden" name="competence" value="{{ competence }}" />
+      <div>
+        <label class="block text-xs text-slate-500">Vencimento dos boletos</label>
+        <input name="due_date" type="date"
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
+      </div>
+      <div class="md:col-span-2 flex items-end">
+        <button class="ripple w-full rounded-xl bg-brandGreen px-4 py-2.5 text-sm font-semibold text-white shadow-soft hover:opacity-95">
+          Salvar e gerar contas a receber
+        </button>
+      </div>
+    </form>
+    <div class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+      Gera 1 conta a receber por construtora com base no total da divisão de custos da competência.
+      Se o vencimento ficar vazio, o sistema usa o último dia do mês.
     </div>
   </div>
 

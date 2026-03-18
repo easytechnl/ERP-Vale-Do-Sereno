@@ -707,16 +707,6 @@
       color:#cbd5e1;
       border-color: rgba(148,163,184,.2);
     }
-    @media (min-width: 1024px){
-      #app-shell.sidebar-hidden #app-sidebar{
-        display: none !important;
-      }
-      #app-shell.sidebar-hidden #app-main{
-        grid-column: 1 / -1 !important;
-        margin-left: 0 !important;
-      }
-    }
-
     /* Fixed sidebar (main menu) */
     :root{
       --sidebar-width: 320px;
@@ -733,6 +723,7 @@
         width: var(--sidebar-width);
         height: calc(100vh - 32px);
         z-index: 20;
+        transform-origin: left center;
       }
       #app-shell.has-sidebar #app-sidebar > div{
         height: 100%;
@@ -741,10 +732,48 @@
       #app-shell.has-sidebar #app-main{
         margin-left: calc(var(--sidebar-width) + var(--sidebar-gap));
       }
+      #app-shell.sidebar-ready.has-sidebar #app-sidebar{
+        transition:
+          transform .34s cubic-bezier(.22, 1, .36, 1),
+          opacity .26s ease,
+          visibility .26s ease,
+          filter .34s ease;
+        will-change: transform, opacity;
+      }
+      #app-shell.sidebar-ready.has-sidebar #app-sidebar > div{
+        transition:
+          box-shadow .34s ease,
+          border-color .34s ease,
+          opacity .26s ease;
+      }
+      #app-shell.sidebar-ready.has-sidebar #app-main{
+        transition: margin-left .34s cubic-bezier(.22, 1, .36, 1);
+      }
+      #app-shell.sidebar-hidden #app-sidebar{
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transform: translateX(-28px) scale(.985);
+        filter: blur(2px);
+      }
+      #app-shell.sidebar-hidden #app-sidebar > div{
+        opacity: .88;
+      }
+      #app-shell.sidebar-hidden #app-main{
+        grid-column: 1 / -1 !important;
+        margin-left: 0 !important;
+      }
     }
     @media (min-width: 1024px){
       #app-shell.has-sidebar #app-sidebar{
         left: 24px;
+      }
+    }
+    @media (prefers-reduced-motion: reduce){
+      #app-shell.has-sidebar #app-sidebar,
+      #app-shell.has-sidebar #app-sidebar > div,
+      #app-shell.has-sidebar #app-main{
+        transition: none !important;
       }
     }
 
@@ -1274,20 +1303,8 @@
                     <i data-lucide="hand-coins" class="h-5 w-5 text-emerald-600"></i>
                   </span>
                   <div class="min-w-0">
-                    <p class="nav-label">Boletos a receber</p>
+                    <p class="nav-label">Contas a receber</p>
                     <p class="nav-sub truncate">Cadastre receitas manualmente.</p>
-                  </div>
-                </a>
-
-                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3
-                          {% if _path.startswith('/notas-fiscais') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
-                   href="/notas-fiscais?competence={{ competence }}">
-                  <span class="h-10 w-10 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center icon-3d icon-rose">
-                    <i data-lucide="receipt" class="h-5 w-5 text-rose-600"></i>
-                  </span>
-                  <div class="min-w-0">
-                    <p class="nav-label">Notas Fiscais</p>
-                    <p class="nav-sub truncate">Controle de contas a pagar.</p>
                   </div>
                 </a>
 
@@ -1328,6 +1345,18 @@
                   <div class="min-w-0">
                     <p class="nav-label">Relat&oacute;rios</p>
                     <p class="nav-sub truncate">Baixe relat&oacute;rios prontos.</p>
+                  </div>
+                </a>
+
+                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3
+                          {% if _path.startswith('/investimentos') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
+                   href="/investimentos?competence={{ competence }}">
+                  <span class="h-10 w-10 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center icon-3d icon-sky">
+                    <i data-lucide="landmark" class="h-5 w-5 text-sky-600"></i>
+                  </span>
+                  <div class="min-w-0">
+                    <p class="nav-label">Investimentos</p>
+                    <p class="nav-sub truncate">Contas separadas para aplicacoes e rendimentos.</p>
                   </div>
                 </a>
 
@@ -1461,7 +1490,7 @@
                     <p class="mt-1 text-sm text-slate-600">Registre entradas e sa&iacute;das do per&iacute;odo, sempre com data, valor e descri&ccedil;&atilde;o.</p>
                   </div>
                   <div class="rounded-2xl border border-black/10 bg-slate-50 p-4">
-                    <p class="font-semibold text-slate-800">3) Boletos e Notas</p>
+                    <p class="font-semibold text-slate-800">3) Boletos</p>
                     <p class="mt-1 text-sm text-slate-600">Emita/importe boletos e atualize o status. Marcar como pago reflete no saldo.</p>
                   </div>
                   <div class="rounded-2xl border border-black/10 bg-slate-50 p-4">
@@ -1477,10 +1506,10 @@
                     <p><b>Cadastros:</b> cadastra clientes, contas e contatos.</p>
                     <p><b>Boletos / CNAB:</b> gera/importa boletos.</p>
                     <p><b>Boletos a pagar:</b> cria contas a pagar manualmente.</p>
-                    <p><b>Boletos a receber:</b> cria cobran&ccedil;as manuais.</p>
-                    <p><b>Notas Fiscais:</b> controla notas vinculadas.</p>
+                    <p><b>Contas a receber:</b> cria cobran&ccedil;as manuais.</p>
                     <p><b>Extrato (OFX):</b> concilia com o banco.</p>
                     <p><b>Divis&atilde;o de Custos:</b> rateia custos por empresa.</p>
+                    <p><b>Investimentos:</b> controla aplicacoes em contas separadas do saldo operacional.</p>
                     <p><b>Relat&oacute;rios:</b> gera arquivos e PDFs.</p>
                     <p><b>Configura&ccedil;&otilde;es:</b> ajusta prefer&ecirc;ncias do sistema.</p>
                     <p><b>E-mails:</b> envia avisos e lembretes.</p>

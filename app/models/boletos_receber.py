@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime
 
 from app.models.base import Base
 
@@ -26,10 +25,6 @@ class BoletoAReceber(Base):
     due_date = Column(Date, nullable=True)
 
     amount = Column(Float, nullable=False, default=0.0)
-
-    # Vinculo opcional com Nota Fiscal cadastrada
-    nota_fiscal_id = Column(Integer, ForeignKey("notas_fiscais.id"), nullable=True, index=True)
-    nota_fiscal = relationship("NotaFiscal")
 
     # A_VENCER | VENCIDO | PAGO
     status = Column(String(20), nullable=False, default="A_VENCER")

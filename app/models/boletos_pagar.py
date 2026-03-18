@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, date
 
-from sqlalchemy import String, Integer, Numeric, Date, DateTime, Text, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Integer, Numeric, Date, DateTime, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
@@ -31,9 +31,6 @@ class BoletoAPagar(Base):
 
     status: Mapped[str] = mapped_column(String(30), default="A_VENCER", index=True)
     paid_at: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-    nota_fiscal_id: Mapped[int | None] = mapped_column(ForeignKey("notas_fiscais.id"), nullable=True, index=True)
-    nota_fiscal = relationship("NotaFiscal")
 
     barcode: Mapped[str | None] = mapped_column(Text, nullable=True)
     digitable_line: Mapped[str | None] = mapped_column(Text, nullable=True)

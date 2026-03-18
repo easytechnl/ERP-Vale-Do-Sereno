@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.models.email import EmailTemplate, EmailBatch, EmailMessage, EmailReminderLog
+from app.core.config import settings
+from app.core.storage import competence_dir, write_bytes
+from app.models.email import EmailTemplate, EmailBatch, EmailMessage, EmailReminderLog, EmailAttachment
 from app.models.boletos import Boleto
 from app.models.boletos_receber import BoletoAReceber
 from app.models.receber import Installment
 from app.modules.email.smtp_service import send_email
 from app.modules.relatorios.service import latest_demonstrativo
+from app.modules.rateio.service import compute_divisao_custos, compute_company_breakdown
+from app.modules.rateio.pdf import generate_company_cost_division_pdf_bytes
 
 
 DEFAULT_TEMPLATE_CODE = "BOLETO_MENSAL"
@@ -19,6 +24,7 @@ DEFAULT_REMINDER_TEMPLATE_CODE = "BOLETO_PRESTES_A_VENCER"
 DEFAULT_REMINDER_DAYS = (10, 5, 3, 1)
 PAID_LIKE = {"PAGA", "PAGO", "BAIXADA", "BAIXADO", "CANCELADA", "CANCELADO"}
 SETTINGS_PATH = Path("data/configuracoes.json")
+EXTERNAL_COMPANY_ATTACHMENTS_KEY = "company_external_attachments"
 OLD_DEFAULT_SUBJECT = "Boleto - Competencia {{competence}} - {{customer_name}}"
 OLD_DEFAULT_REMINDER_SUBJECT = "Lembrete: boleto vence em {{days_left}} dia(s) - {{customer_name}}"
 EMAIL_LOGO_CID = "arcvstudo_logo"
@@ -292,6 +298,77 @@ def _support_email_for_template() -> str:
     return (settings.SMTP_FROM or "financeiro@empresa.com").strip() or "financeiro@empresa.com"
 
 
+def _load_company_emails() -> dict[str, str]:
+    if not SETTINGS_PATH.exists():
+        return {}
+    try:
+        data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    val = data.get("company_emails") or {}
+    return val if isinstance(val, dict) else {}
+
+
+def _load_company_external_attachments_for_competence(competence: str) -> dict[str, dict | str]:
+    if not SETTINGS_PATH.exists():
+        return {}
+    try:
+        data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    all_competences = data.get(EXTERNAL_COMPANY_ATTACHMENTS_KEY) or {}
+    if not isinstance(all_competences, dict):
+        return {}
+    one_competence = all_competences.get(competence) or {}
+    return one_competence if isinstance(one_competence, dict) else {}
+
+
+def _extract_external_attachment_path(value: dict | str | None) -> Path | None:
+    if isinstance(value, str):
+        path_str = value.strip()
+    elif isinstance(value, dict):
+        path_str = str(value.get("file_path") or "").strip()
+    else:
+        path_str = ""
+    if not path_str:
+        return None
+    return Path(path_str)
+
+
+def _safe_name(value: str) -> str:
+    base = (value or "").strip().replace("/", "-").replace("\\", "-")
+    return "_".join(base.split()) or "construtora"
+
+
+def _company_key(value: str) -> str:
+    txt = (value or "").strip().lower()
+    txt = unicodedata.normalize("NFKD", txt)
+    return "".join(ch for ch in txt if ch.isalnum())
+
+
+def _extract_rateio_contas_map(db: Session, competence: str) -> dict[str, BoletoAReceber]:
+    """Mapeia conta a receber da divisão por nome da construtora (normalizado)."""
+    rows = (
+        db.query(BoletoAReceber)
+        .filter(BoletoAReceber.competence_month == competence)
+        .order_by(BoletoAReceber.id.desc())
+        .all()
+    )
+    out: dict[str, BoletoAReceber] = {}
+    for row in rows:
+        desc = (row.description or "").strip().lower()
+        if ("divis" not in desc) or ("cust" not in desc):
+            continue
+        key = _company_key(row.customer_name or "")
+        if key and key not in out:
+            out[key] = row
+    return out
+
+
 def _is_unpaid_boleto(b: Boleto) -> bool:
     boleto_status = str((b.status or "")).upper()
     inst_status = str((b.installment.status if b.installment else "") or "").upper()
@@ -387,6 +464,307 @@ def send_batch_for_competence(db: Session, competence: str, *, only_overdue: boo
         "failed": failed,
         "total": len(boletos),
         "only_overdue": bool(only_overdue),
+        "reference_date": today.isoformat(),
+    }
+
+
+def send_companies_boleto_batch_for_competence(
+    db: Session,
+    competence: str,
+    *,
+    company_ids: set[int] | None = None,
+) -> dict:
+    """Envia e-mails para construtoras com anexo individual (PDF) da cobrança do mês."""
+    EmailAttachment.__table__.create(bind=db.get_bind(), checkfirst=True)
+    preview = compute_divisao_custos(db=db, competence=competence)
+    companies = preview.get("companies") or []
+    if company_ids is not None:
+        companies = [c for c in companies if int(c.get("id") or 0) in company_ids]
+    today = date.today()
+
+    company_emails = _load_company_emails()
+    rateio_contas = _extract_rateio_contas_map(db, competence)
+    logo_html, inline_images = _logo_html_and_inline()
+    support_email = _support_email_for_template()
+
+    batch = EmailBatch(
+        competence_month=competence,
+        status="ENVIANDO",
+        filters_json={
+            "kind": "construtoras_boleto",
+            "competence": competence,
+            "reference_date": today.isoformat(),
+        },
+    )
+    db.add(batch)
+    db.commit()
+    db.refresh(batch)
+
+    sent = 0
+    failed = 0
+    eligible = 0
+    skipped_no_email = 0
+    skipped_no_conta = 0
+    skipped_no_amount = 0
+    skipped_no_company = 0
+
+    out_dir = competence_dir(competence) / "emails_construtoras"
+
+    for company in companies:
+        company_id = int(company.get("id") or 0)
+        company_name = str(company.get("name") or "").strip()
+        if company_id <= 0 or not company_name:
+            skipped_no_company += 1
+            continue
+
+        to_email = (company_emails.get(str(company_id)) or "").strip()
+        if not to_email:
+            skipped_no_email += 1
+            continue
+
+        conta = rateio_contas.get(_company_key(company_name))
+        if not conta:
+            skipped_no_conta += 1
+            continue
+
+        amount = float(conta.amount or 0.0)
+        if amount <= 0:
+            skipped_no_amount += 1
+            continue
+
+        data = compute_company_breakdown(preview, company_id)
+        if not data:
+            skipped_no_company += 1
+            continue
+
+        due_br = _format_date_br(conta.due_date) if conta.due_date else "Nao informado"
+        competence_br = competence[5:7] + "/" + competence[:4]
+
+        pdf_bytes = generate_company_cost_division_pdf_bytes(
+            association_name="Associação Vale do Sereno",
+            competence=competence,
+            total_despesas=float(preview.get("total_despesas") or 0.0),
+            despesas_breakdown=data.get("breakdown") or [],
+            company=data.get("company") or {},
+            total_company=float(data.get("total_company") or amount),
+            footer_brand="Desenvolvido EasyTech — Facilitando a tecnologia",
+        )
+        pdf_path = out_dir / f"boleto_construtora_{competence}_{_safe_name(company_name)}.pdf"
+        write_bytes(pdf_path, pdf_bytes)
+
+        subject = f"Conta a receber | Divisão de custos {competence_br} | {company_name}"
+        body = (
+            "<div style='font-family:Arial,sans-serif;color:#0f172a'>"
+            f"{logo_html}"
+            f"<p>Prezados, <b>{company_name}</b>.</p>"
+            f"<p>Segue em anexo a cobrança individual da <b>divisão de custos</b> da competência <b>{competence_br}</b>.</p>"
+            "<table style='border-collapse:collapse;width:100%;max-width:520px'>"
+            "<tr><td style='padding:8px;border:1px solid #e2e8f0;font-weight:700'>Competência</td>"
+            f"<td style='padding:8px;border:1px solid #e2e8f0'>{competence_br}</td></tr>"
+            "<tr><td style='padding:8px;border:1px solid #e2e8f0;font-weight:700'>Valor</td>"
+            f"<td style='padding:8px;border:1px solid #e2e8f0'>R$ {_format_amount_br(amount)}</td></tr>"
+            "<tr><td style='padding:8px;border:1px solid #e2e8f0;font-weight:700'>Vencimento</td>"
+            f"<td style='padding:8px;border:1px solid #e2e8f0'>{due_br}</td></tr>"
+            "</table>"
+            "<p style='margin-top:14px'>Em caso de dúvidas, responda este e-mail.</p>"
+            f"<p>Contato financeiro: <b>{support_email}</b></p>"
+            "</div>"
+        )
+
+        msg = EmailMessage(
+            batch_id=batch.id,
+            to_emails=to_email,
+            subject=subject,
+            body_html=body,
+            status="PENDENTE",
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+
+        eligible += 1
+        try:
+            send_email([to_email], subject, body, [pdf_path], inline_images=inline_images)
+            msg.status = "ENVIADO"
+            msg.sent_at = datetime.now(timezone.utc)
+            db.add(
+                EmailAttachment(
+                    email_message_id=msg.id,
+                    kind="boleto_construtora",
+                    file_path=str(pdf_path),
+                )
+            )
+            sent += 1
+        except Exception as exc:
+            msg.status = "FALHOU"
+            msg.error = str(exc)
+            failed += 1
+        db.commit()
+
+    batch.status = "CONCLUIDO" if failed == 0 else "FALHOU"
+    db.commit()
+
+    return {
+        "batch_id": batch.id,
+        "sent": sent,
+        "failed": failed,
+        "eligible": eligible,
+        "total_companies": len(companies),
+        "skipped_no_email": skipped_no_email,
+        "skipped_no_conta": skipped_no_conta,
+        "skipped_no_amount": skipped_no_amount,
+        "skipped_no_company": skipped_no_company,
+        "reference_date": today.isoformat(),
+    }
+
+
+def send_companies_external_attachment_batch_for_competence(
+    db: Session,
+    competence: str,
+    *,
+    company_ids: set[int] | None = None,
+) -> dict:
+    """Envia e-mails para construtoras usando anexo externo previamente cadastrado."""
+    EmailAttachment.__table__.create(bind=db.get_bind(), checkfirst=True)
+    preview = compute_divisao_custos(db=db, competence=competence)
+    companies = preview.get("companies") or []
+    if company_ids is not None:
+        companies = [c for c in companies if int(c.get("id") or 0) in company_ids]
+    today = date.today()
+
+    company_emails = _load_company_emails()
+    company_attachments = _load_company_external_attachments_for_competence(competence)
+    rateio_contas = _extract_rateio_contas_map(db, competence)
+    logo_html, inline_images = _logo_html_and_inline()
+    support_email = _support_email_for_template()
+
+    batch = EmailBatch(
+        competence_month=competence,
+        status="ENVIANDO",
+        filters_json={
+            "kind": "construtoras_boleto_externo",
+            "competence": competence,
+            "reference_date": today.isoformat(),
+        },
+    )
+    db.add(batch)
+    db.commit()
+    db.refresh(batch)
+
+    sent = 0
+    failed = 0
+    eligible = 0
+    skipped_no_email = 0
+    skipped_no_attachment = 0
+    skipped_missing_attachment = 0
+    skipped_no_company = 0
+
+    competence_br = competence[5:7] + "/" + competence[:4]
+
+    for company in companies:
+        company_id = int(company.get("id") or 0)
+        company_name = str(company.get("name") or "").strip()
+        if company_id <= 0 or not company_name:
+            skipped_no_company += 1
+            continue
+
+        to_email = (company_emails.get(str(company_id)) or "").strip()
+        if not to_email:
+            skipped_no_email += 1
+            continue
+
+        attachment_value = company_attachments.get(str(company_id))
+        attachment_path = _extract_external_attachment_path(attachment_value)
+        if not attachment_path:
+            skipped_no_attachment += 1
+            continue
+        if not attachment_path.exists() or not attachment_path.is_file():
+            skipped_missing_attachment += 1
+            continue
+
+        conta = rateio_contas.get(_company_key(company_name))
+        amount = float(conta.amount or 0.0) if conta else 0.0
+        due_br = _format_date_br(conta.due_date) if conta and conta.due_date else "Nao informado"
+
+        subject = f"Cobranca financeira | Boleto externo | Competencia {competence_br} | {company_name}"
+        body = (
+            "<div style='margin:0;padding:26px 12px;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a'>"
+            "<table role='presentation' cellspacing='0' cellpadding='0' style='width:100%;max-width:700px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden'>"
+            "<tr><td style='height:6px;background:linear-gradient(90deg,#065f46 0%,#0f766e 100%)'></td></tr>"
+            "<tr><td style='padding:24px 28px 8px'>"
+            f"{logo_html}"
+            "<div style='font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#475569;font-weight:700'>Comunicado Financeiro</div>"
+            "<h1 style='margin:10px 0 8px;font-size:24px;line-height:1.25;color:#0f172a'>Envio de boleto externo</h1>"
+            "<p style='margin:0;color:#334155;font-size:15px;line-height:1.65'>Prezados(as),</p>"
+            f"<p style='margin:10px 0 0;color:#334155;font-size:15px;line-height:1.65'>Encaminhamos, para {company_name}, o boleto externo referente a competencia <b>{competence_br}</b>, conforme dados abaixo.</p>"
+            "</td></tr>"
+            "<tr><td style='padding:10px 28px 0'>"
+            "<table role='presentation' cellspacing='0' cellpadding='0' style='width:100%;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc'>"
+            "<tr><td style='padding:14px 16px;border-bottom:1px solid #e2e8f0;width:40%;font-size:13px;color:#475569;font-weight:700'>Competencia</td>"
+            f"<td style='padding:14px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:700'>{competence_br}</td></tr>"
+            "<tr><td style='padding:14px 16px;border-bottom:1px solid #e2e8f0;width:40%;font-size:13px;color:#475569;font-weight:700'>Valor</td>"
+            f"<td style='padding:14px 16px;border-bottom:1px solid #e2e8f0;font-size:15px;color:#0f172a;font-weight:700'>R$ {_format_amount_br(amount)}</td></tr>"
+            "<tr><td style='padding:14px 16px;width:40%;font-size:13px;color:#475569;font-weight:700'>Vencimento</td>"
+            f"<td style='padding:14px 16px;font-size:15px;color:#0f172a;font-weight:700'>{due_br}</td></tr>"
+            "</table>"
+            "</td></tr>"
+            "<tr><td style='padding:14px 28px 0'>"
+            "<div style='background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:10px 12px;color:#065f46;font-size:12px;line-height:1.5'>"
+            "Solicitamos, por gentileza, a observancia do vencimento. Caso o pagamento ja tenha sido efetuado, favor desconsiderar este comunicado."
+            "</div>"
+            "</td></tr>"
+            "<tr><td style='padding:20px 28px 24px;border-top:1px solid #e2e8f0'>"
+            "<p style='margin:0;color:#334155;font-size:13px;line-height:1.6'>Permanecemos a disposicao para quaisquer esclarecimentos.</p>"
+            f"<p style='margin:6px 0 0;color:#334155;font-size:13px;line-height:1.6'>Contato do financeiro: <a href='mailto:{support_email}' style='color:#065f46;font-weight:700;text-decoration:none'>{support_email}</a></p>"
+            "<p style='margin:10px 0 0;color:#0f172a;font-size:13px;line-height:1.6;font-weight:700'>Atenciosamente,<br/>Equipe Financeira - Vale do Sereno</p>"
+            "</td></tr>"
+            "</table>"
+            "</div>"
+        )
+
+        msg = EmailMessage(
+            batch_id=batch.id,
+            to_emails=to_email,
+            subject=subject,
+            body_html=body,
+            status="PENDENTE",
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+
+        eligible += 1
+        try:
+            send_email([to_email], subject, body, [attachment_path], inline_images=inline_images)
+            msg.status = "ENVIADO"
+            msg.sent_at = datetime.now(timezone.utc)
+            db.add(
+                EmailAttachment(
+                    email_message_id=msg.id,
+                    kind="boleto_construtora_externo",
+                    file_path=str(attachment_path),
+                )
+            )
+            sent += 1
+        except Exception as exc:
+            msg.status = "FALHOU"
+            msg.error = str(exc)
+            failed += 1
+        db.commit()
+
+    batch.status = "CONCLUIDO" if failed == 0 else "FALHOU"
+    db.commit()
+
+    return {
+        "batch_id": batch.id,
+        "sent": sent,
+        "failed": failed,
+        "eligible": eligible,
+        "total_companies": len(companies),
+        "skipped_no_email": skipped_no_email,
+        "skipped_no_attachment": skipped_no_attachment,
+        "skipped_missing_attachment": skipped_missing_attachment,
+        "skipped_no_company": skipped_no_company,
         "reference_date": today.isoformat(),
     }
 
@@ -627,7 +1005,10 @@ def list_due_soon_candidates(
     rows = []
     for b in boletos:
         snap = _due_soon_snapshot(db, b, days_before=days_before)
-        if snap:
+        if snap and (
+            bool(snap.get("can_send"))
+            or (bool(snap.get("already_sent")) and bool((snap.get("customer_email") or "").strip()))
+        ):
             rows.append(snap)
 
     if include_manual:
@@ -639,7 +1020,10 @@ def list_due_soon_candidates(
         )
         for br in manuais:
             snap = _due_soon_manual_snapshot(br, days_before=days_before)
-            if snap:
+            if snap and (
+                bool(snap.get("can_send"))
+                or (bool(snap.get("already_sent")) and bool((snap.get("customer_email") or "").strip()))
+            ):
                 rows.append(snap)
 
     rows.sort(key=lambda x: (x.get("due_date"), x.get("target_kind"), int(x.get("target_id") or 0)))

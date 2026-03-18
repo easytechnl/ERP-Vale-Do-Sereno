@@ -191,7 +191,6 @@ def boletos_pagar_stats_for_competence(db: Session, competence: str) -> dict:
                 due_soon_total += amt
                 due_soon_count += 1
 
-        nf = b.nota_fiscal
         items.append(
             {
                 "id": b.id,
@@ -201,16 +200,6 @@ def boletos_pagar_stats_for_competence(db: Session, competence: str) -> dict:
                 "amount": amt,
                 "status": st,
                 "paid_at": b.paid_at,
-                "nota_fiscal": (
-                    {
-                        "id": nf.id,
-                        "numero": nf.numero,
-                        "fornecedor": nf.fornecedor or "",
-                        "amount": float(nf.amount or 0.0),
-                    }
-                    if nf
-                    else None
-                ),
                 "overdue": overdue,
                 "due_soon": due_soon,
             }
@@ -275,7 +264,7 @@ def combined_totals_for_competence(db: Session, competence: str) -> dict:
 
 
 def boletos_receber_cadastro_stats_for_competence(db: Session, competence: str) -> dict:
-    """Totais e listas para boletos a receber cadastrados manualmente.
+    """Totais e listas para contas a receber cadastradas manualmente.
 
     A prestação de contas precisa exibir TODOS os boletos (a vencer, vencidos e pagos),
     além de permitir usar como checklist (marcar como PAGO).

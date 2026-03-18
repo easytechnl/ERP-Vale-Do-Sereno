@@ -76,22 +76,17 @@ def boletos_previstos_pdf_bytes(competence, boletos_pagar: dict | None = None, b
             story.append(Paragraph("Nenhum boleto nesta seção.", st["small"]))
             story.append(Spacer(1, 8))
             return
-        rows = [["Beneficiário", "Descrição", "Vencimento", "Valor", "NF"]]
+        rows = [["Beneficiário", "Descrição", "Vencimento", "Valor"]]
         for b in items:
             due = b.get("due_date")
             due_s = due.strftime("%d/%m/%Y") if hasattr(due, "strftime") and due else "—"
-            nf = b.get("nota_fiscal")
-            nf_s = "—"
-            if isinstance(nf, dict):
-                nf_s = f"{nf.get('numero') or ''}".strip() or "—"
             rows.append([
                 b.get("beneficiario") or "—",
                 (b.get("descricao") or "—")[:60],
                 due_s,
                 f"R${NBSP}{_brl(float(b.get('amount') or 0.0))}",
-                nf_s,
             ])
-        tbl = Table(rows, colWidths=[52 * mm, 48 * mm, 22 * mm, 28 * mm, 20 * mm])
+        tbl = Table(rows, colWidths=[58 * mm, 56 * mm, 24 * mm, 32 * mm])
         tbl.setStyle(
             TableStyle(
                 [

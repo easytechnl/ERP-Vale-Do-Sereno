@@ -6,6 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from pathlib import Path
 
 from app.core.config import settings
+from app.core.db import SessionLocal
 from app.core.templating import register_exception_handlers
 from app.core.audit_context import audit_user_id, audit_ip
 from app.modules.auth.router import router as auth_router
@@ -18,7 +19,11 @@ from app.modules.relatorios.router import router as relatorios_router
 from app.modules.email.router import router as email_router
 from app.modules.lancamentos.router import router as lancamentos_router
 from app.modules.configuracoes.router import router as configuracoes_router
+from app.modules.rateio.router import router as rateio_router
+from app.modules.prestacao_contas.router import router as prestacao_contas_router
+from app.modules.investimentos.router import router as investimentos_router
 from app.modules.email.automation import start_email_automation, stop_email_automation
+from app.modules.investimentos.service import ensure_investment_schema
 
 app = FastAPI(title="ERP Financeiro (MVP)")
 
@@ -61,6 +66,9 @@ app.include_router(receber_router)
 app.include_router(lancamentos_router)
 app.include_router(boletos_router)
 app.include_router(conciliacao_router)
+app.include_router(rateio_router)
+app.include_router(prestacao_contas_router)
+app.include_router(investimentos_router)
 app.include_router(relatorios_router)
 app.include_router(email_router)
 app.include_router(configuracoes_router)
@@ -70,6 +78,11 @@ register_exception_handlers(app)
 
 @app.on_event("startup")
 def on_startup():
+    db = SessionLocal()
+    try:
+        ensure_investment_schema(db)
+    finally:
+        db.close()
     start_email_automation()
 
 

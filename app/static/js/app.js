@@ -247,6 +247,9 @@ async function postForm(url, formData) {
       if (collapsed) shell.classList.add("sidebar-hidden");
     } catch (_) {}
     syncSidebarBtnState();
+    requestAnimationFrame(() => {
+      shell.classList.add("sidebar-ready");
+    });
 
     sidebarBtn.addEventListener("click", () => {
       shell.classList.toggle("sidebar-hidden");

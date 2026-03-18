@@ -1,13 +1,13 @@
 {% extends "layout.html" %}
-{% set title = "Boletos a Receber (Cadastro)" %}
-{% set page_subtitle = "Cadastre boletos a receber manualmente e marque o status." %}
+{% set title = "Contas a Receber (Cadastro)" %}
+{% set page_subtitle = "Cadastre contas a receber manualmente e marque o status." %}
 
 {% block content %}
 <div class="space-y-6">
   <div class="glass rounded-3xl p-5 sm:p-6">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <div class="text-lg font-semibold text-slate-900">Cadastro de boletos a receber</div>
+        <div class="text-lg font-semibold text-slate-900">Cadastro de contas a receber</div>
         <div class="text-sm text-slate-500">Competência: <b>{{ competence|competence_br }}</b></div>
       </div>
       <a href="/boletos?competence={{ competence }}" class="btn btn-secondary ripple">
@@ -19,7 +19,7 @@
 
   <div class="grid gap-6 xl:grid-cols-12">
     <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-4">
-      <div class="text-lg font-semibold text-slate-900">Cadastrar boleto a receber</div>
+      <div class="text-lg font-semibold text-slate-900">Cadastrar conta a receber</div>
       <form class="mt-4 space-y-3" method="post" action="/boletos/receber-cadastro/create">
         <input type="hidden" name="competence" value="{{ competence }}" />
 
@@ -73,20 +73,6 @@
           <input class="input" name="description" id="descriptionInput" placeholder="Ex: Mensalidade / Taxa / Serviço" />
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-slate-600">Vincular Nota Fiscal (opcional)</label>
-          <select class="input" name="nota_fiscal_id">
-            <option value="">-- sem vinculo --</option>
-            {% for n in notas %}
-            <option value="{{ n.id }}">
-              NF {{ n.numero }}{% if n.fornecedor %} - {{ n.fornecedor }}{% endif %} - R$ {{ "%.2f"|format(n.amount or 0) }}
-            </option>
-            {% endfor %}
-          </select>
-          {% if not notas %}
-          <div class="mt-1 text-xs text-slate-500">Nenhuma nota fiscal cadastrada para esta competencia.</div>
-          {% endif %}
-        </div>
-        <div>
           <label class="mb-1 block text-xs font-medium text-slate-600">Status</label>
           <select class="input" name="status" id="statusSelect">
             <option value="A_VENCER">A VENCER</option>
@@ -101,7 +87,7 @@
 
     <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-8">
       <div class="mb-4">
-        <div class="text-lg font-semibold text-slate-900">Boletos a receber cadastrados</div>
+        <div class="text-lg font-semibold text-slate-900">Contas a receber cadastradas</div>
         <div class="text-sm text-slate-500">Ao marcar como <b>PAGO</b>, o sistema cria automaticamente uma <b>ENTRADA</b> em Lançamentos.</div>
       </div>
 
@@ -111,7 +97,6 @@
             <tr>
               <th class="text-left">Cliente</th>
               <th class="text-left">Descrição</th>
-              <th class="text-left">NF vinculada</th>
               <th class="text-left">Vencimento</th>
               <th class="text-left">Valor</th>
               <th class="text-left">Status</th>
@@ -133,13 +118,6 @@
                 </form>
               </td>
               <td>{{ b.description or "—" }}</td>
-              <td>
-                {% if b.nota_fiscal %}
-                NF {{ b.nota_fiscal.numero }}{% if b.nota_fiscal.fornecedor %} - {{ b.nota_fiscal.fornecedor }}{% endif %}
-                {% else %}
-                —
-                {% endif %}
-              </td>
               <td>{{ b.due_date.strftime("%d/%m/%Y") if b.due_date else "—" }}</td>
               <td class="font-semibold text-slate-900">R$ {{ "%.2f"|format(b.amount or 0) }}</td>
               <td>
@@ -177,7 +155,7 @@
             </tr>
             {% else %}
             <tr>
-              <td class="py-6 text-center text-sm text-slate-500" colspan="7">Nenhum boleto cadastrado nesta competência.</td>
+              <td class="py-6 text-center text-sm text-slate-500" colspan="6">Nenhum boleto cadastrado nesta competência.</td>
             </tr>
             {% endfor %}
           </tbody>

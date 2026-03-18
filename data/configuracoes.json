@@ -29,5 +29,9 @@
   "last_backup_path": "data\\storage\\backups\\erp_backup_20260206_014750.dump",
   "last_backup_error": null,
   "last_restore": null,
-  "last_restore_error": null
+  "last_restore_error": null,
+  "company_external_attachments": {},
+  "company_emails": {
+    "1": "grgsouza1@gmail.com"
+  }
 }

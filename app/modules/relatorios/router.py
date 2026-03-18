@@ -22,6 +22,11 @@ from app.modules.relatorios.service import (
     list_lancamentos_for_export,
     periodo_report,
 )
+from app.modules.relatorios.boleto_receber_pdf import boleto_receber_report_pdf_bytes
+from app.modules.relatorios.boleto_receber_reports import (
+    build_boleto_receber_report,
+    build_boleto_receber_report_bundle,
+)
 
 from app.modules.rateio.service import compute_divisao_custos
 from app.modules.rateio.pdf_summary import generate_rateio_summary_pdf_bytes
@@ -71,10 +76,7 @@ def _csv_stream(rows: list[dict], fieldnames: list[str]) -> Iterable[bytes]:
 
 def _csv_response(payload: dict, filename: str) -> StreamingResponse:
     rows = payload.get("rows", []) or []
-    if rows:
-        fieldnames = list(rows[0].keys())
-    else:
-        fieldnames = DEFAULT_FIELDS
+    fieldnames = payload.get("fieldnames") or (list(rows[0].keys()) if rows else DEFAULT_FIELDS)
 
     return StreamingResponse(
         _csv_stream(rows, fieldnames),
@@ -105,6 +107,63 @@ def relatorios_home(
             "competence": competence,
             "close": close,
         },
+    )
+
+
+@router.get("/boletos-receber")
+def relatorios_boletos_receber_page(
+    request: Request,
+    competence: str | None = None,
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    import datetime
+
+    competence = normalize_competence(competence) or datetime.date.today().strftime("%Y-%m")
+    data = build_boleto_receber_report_bundle(db, competence)
+    return templates.TemplateResponse(
+        "relatorios/boletos_receber.html",
+        {
+            "request": request,
+            "user": user,
+            "competence": competence,
+            "data": data,
+        },
+    )
+
+
+@router.get("/boletos-receber/export.csv")
+def export_boletos_receber_csv(
+    competence: str,
+    report: str = "all",
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    competence = normalize_competence(competence) or competence
+    payload = build_boleto_receber_report(db, competence, report)
+    return _csv_response(
+        {
+            "rows": payload.get("csv_rows") or [],
+            "fieldnames": [column["label"] for column in (payload.get("pdf_columns") or [])],
+        },
+        f"{payload['filename_base']}.csv",
+    )
+
+
+@router.get("/boletos-receber/export.pdf")
+def export_boletos_receber_pdf(
+    competence: str,
+    report: str = "all",
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    competence = normalize_competence(competence) or competence
+    payload = build_boleto_receber_report(db, competence, report)
+    pdf_bytes = boleto_receber_report_pdf_bytes(payload)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{payload["filename_base"]}.pdf"'},
     )
 
 

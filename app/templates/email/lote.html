@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+﻿{% extends "layout.html" %}
 {% set title = "E-mail em lote" %}
 {% set page_subtitle = "Envio em lote para clientes em atraso (vencidos e não pagos)." %}
 
@@ -54,9 +54,13 @@
     <div class="text-sm font-semibold">Ações</div>
     <div class="mt-3 flex flex-wrap gap-2">
       <button id="btnEnviar" class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white hover:bg-slate-800">Enviar cobrança de atrasados</button>
+      <button id="btnEnviarConstrutorasExterno" class="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm text-white hover:bg-emerald-800">Enviar boletos das construtoras (anexo externo)</button>
       <button id="btnLembretes" class="rounded-xl bg-brandGreen px-4 py-2.5 text-sm text-white hover:opacity-95">Rodar lembretes (10/5/3/1 dias)</button>
       <div class="text-xs text-slate-500 self-center">
         Envia somente boletos vencidos e não pagos da competência selecionada.
+      </div>
+      <div class="text-xs text-slate-500 basis-full">
+        No envio por anexo externo, o sistema usa o PDF enviado manualmente na tabela de construtoras abaixo.
       </div>
       <div class="text-xs text-slate-500 basis-full">
         Para envio automático, ative em Configurações > Preferências gerais: "Enviar lembretes automáticos (10, 5, 3 e 1 dia antes do vencimento)".
@@ -71,7 +75,7 @@
     <div>
       <div class="text-sm font-semibold">Boletos prestes a vencer (10/5/3/1 dias)</div>
       <div class="mt-1 text-xs text-slate-500">
-        Veja quem esta perto do vencimento e envie lembrete de forma rapida.
+        Veja quem está perto do vencimento e envie lembrete de forma rápida.
       </div>
     </div>
   </div>
@@ -88,7 +92,7 @@
   {% endif %}
   {% if request.query_params.get("due_reminder") == "err" %}
   <div class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-    {{ request.query_params.get("due_msg") or "Nao foi possivel enviar lembrete." }}
+    {{ request.query_params.get("due_msg") or "Não foi possível enviar lembrete." }}
   </div>
   {% endif %}
 
@@ -100,7 +104,7 @@
     </div>
     <div class="mb-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
       <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium text-slate-600">Filtrar por competencia</span>
+        <span class="text-xs font-medium text-slate-600">Filtrar por competência</span>
         <select id="dueSoonFilterCompetence" class="input h-10">
           <option value="">Todas</option>
           {% for comp in due_soon_competences %}
@@ -130,12 +134,12 @@
             <th class="py-2 w-8"><input id="dueSoonSelectAll" type="checkbox" class="h-4 w-4 rounded border-slate-300" /></th>
             <th class="py-2">Cliente</th>
             <th class="py-2">E-mail</th>
-            <th class="py-2">Competencia</th>
+            <th class="py-2">Competência</th>
             <th class="py-2">Vencimento</th>
             <th class="py-2">Dias</th>
             <th class="py-2">Valor</th>
             <th class="py-2">Status</th>
-            <th class="py-2">Acao</th>
+            <th class="py-2">Ação</th>
           </tr>
         </thead>
         <tbody>
@@ -184,6 +188,21 @@
                 Enviar agora
               </button>
               {% endif %}
+              {% elif d.target_kind == "boleto" and d.already_sent %}
+              <form
+                method="post"
+                action="/email/reminders/{{ d.target_id }}/delete"
+                onsubmit="return confirm('Excluir este lembrete e liberar novo envio?')"
+              >
+                <input type="hidden" name="competence" value="{{ competence }}" />
+                <input type="hidden" name="days_left" value="{{ d.days_left }}" />
+                <button
+                  type="submit"
+                  class="btn btn-secondary ripple !px-3 !py-1.5 !text-xs"
+                >
+                  Excluir lembrete
+                </button>
+              </form>
               {% else %}
               <span class="text-xs text-slate-400">-</span>
               {% endif %}
@@ -200,16 +219,29 @@
   <div class="glass p-7">
     <div class="text-sm font-semibold">Histórico de envios</div>
     <div class="mt-1 text-xs text-slate-500">Aqui aparecem as tentativas de envio de e-mail que já foram feitas.</div>
-    <div class="mt-3 space-y-2 text-sm">
-      {% for b in batches %}
-        <div class="rounded-xl border border-slate-200 bg-white px-3 py-2">
-          <div class="font-semibold">Envio #{{ b.id }} — {{ b.status }}</div>
-          <div class="text-xs text-slate-600">{{ b.created_at }}</div>
-        </div>
-      {% endfor %}
-      {% if batches|length == 0 %}
-        <div class="text-slate-600">Você ainda não fez nenhum envio. Clique em "Enviar cobrança de atrasados" ou "Rodar lembretes".</div>
-      {% endif %}
+    <div class="mt-4 overflow-auto">
+      <table id="batchesTable" class="w-full text-sm">
+        <thead class="text-left text-slate-500">
+          <tr>
+            <th class="py-2">Envio</th>
+            <th class="py-2">Status</th>
+            <th class="py-2">Criado em</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in batches %}
+          <tr class="border-t border-slate-200/70">
+            <td class="py-2 font-semibold">#{{ b.id }}</td>
+            <td class="py-2"><span class="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs">{{ b.status }}</span></td>
+            <td class="py-2 text-xs text-slate-600">{{ b.created_at }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td class="py-3 text-slate-600" colspan="3">Você ainda não fez nenhum envio. Clique em "Enviar cobrança de atrasados" ou "Rodar lembretes".</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -243,13 +275,24 @@
 <div class="mt-6 glass p-7">
   <div class="text-sm font-semibold">E-mails das construtoras</div>
   <div class="mt-1 text-xs text-slate-500">Cadastre o e-mail de cada construtora para comunicação rápida.</div>
+  {% if request.query_params.get("ext_attach") == "ok" %}
+  <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+    {{ request.query_params.get("ext_attach_msg") or "Anexo externo atualizado com sucesso." }}
+  </div>
+  {% endif %}
+  {% if request.query_params.get("ext_attach") == "err" %}
+  <div class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+    {{ request.query_params.get("ext_attach_msg") or "Falha ao processar anexo externo." }}
+  </div>
+  {% endif %}
   <div class="mt-4 overflow-auto">
     <table id="companiesTable" class="w-full text-sm">
       <thead class="text-left text-slate-500">
         <tr>
           <th class="py-2">Construtora</th>
           <th class="py-2">E-mail</th>
-          <th class="py-2"></th>
+          <th class="py-2">Anexo externo ({{ competence|competence_br }})</th>
+          <th class="py-2">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -264,11 +307,60 @@
             </form>
           </td>
           <td class="py-2 text-xs">
-            {% if c.email %}
-            <span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">Cadastrado</span>
+            {% if c.external_attachment %}
+            <div class="space-y-2">
+              <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                <div class="font-semibold text-slate-700">{{ c.external_attachment.original_name }}</div>
+                <div class="text-[11px] text-slate-500">
+                  {% if c.external_attachment.uploaded_at %}
+                  Enviado em: {{ c.external_attachment.uploaded_at }}
+                  {% else %}
+                  Arquivo cadastrado
+                  {% endif %}
+                </div>
+                {% if c.external_attachment.exists %}
+                <a class="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800" href="/email/construtoras/{{ c.id }}/anexo-externo/download?competence={{ competence }}">
+                  Baixar anexo
+                </a>
+                {% else %}
+                <span class="text-[11px] font-semibold text-amber-700">Arquivo não encontrado no disco</span>
+                {% endif %}
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <form method="post" action="/email/construtoras/{{ c.id }}/anexo-externo/delete" onsubmit="return confirm('Remover anexo externo desta construtora?')">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <button class="btn btn-secondary ripple !px-3 !py-1.5 !text-xs">Remover anexo</button>
+                </form>
+                <form class="flex items-center gap-2" method="post" action="/email/construtoras/{{ c.id }}/anexo-externo" enctype="multipart/form-data">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <input class="input h-9 text-xs" type="file" name="attachment_file" accept=".pdf,application/pdf" required />
+                  <button class="btn btn-secondary ripple !px-3 !py-1.5 !text-xs">Substituir PDF</button>
+                </form>
+              </div>
+            </div>
             {% else %}
-            <span class="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700">Sem e-mail</span>
+            <form class="flex items-center gap-2" method="post" action="/email/construtoras/{{ c.id }}/anexo-externo" enctype="multipart/form-data">
+              <input type="hidden" name="competence" value="{{ competence }}" />
+              <input class="input h-9 text-xs" type="file" name="attachment_file" accept=".pdf,application/pdf" required />
+              <button class="btn btn-secondary ripple !px-3 !py-1.5 !text-xs">Enviar PDF</button>
+            </form>
             {% endif %}
+          </td>
+          <td class="py-2 text-xs">
+            <div class="flex flex-wrap gap-1">
+              {% if c.email %}
+              <span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">E-mail ok</span>
+              {% else %}
+              <span class="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700">Sem e-mail</span>
+              {% endif %}
+              {% if c.external_attachment and c.external_attachment.exists %}
+              <span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">Anexo ok</span>
+              {% elif c.external_attachment %}
+              <span class="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700">Anexo ausente</span>
+              {% else %}
+              <span class="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700">Sem anexo</span>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -278,14 +370,14 @@
 </div>
 
 <div class="mt-6 glass p-7">
-  <div class="text-sm font-semibold">Configuracao SMTP (remetente)</div>
+  <div class="text-sm font-semibold">Configuração SMTP (remetente)</div>
   <div class="mt-1 text-xs text-slate-500">
-    Configure aqui o e-mail que envia as cobrancas. Para Gmail, use senha de app do Google.
+    Configure aqui o e-mail que envia as cobranças. Para Gmail, use senha de app do Google.
   </div>
 
   {% if request.query_params.get("smtp") == "ok" %}
   <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-    Configuracao SMTP salva com sucesso.
+    Configuração SMTP salva com sucesso.
   </div>
   {% endif %}
   {% if request.query_params.get("smtp_test") == "ok" %}
@@ -299,11 +391,11 @@
   </div>
   {% endif %}
   <div class="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
-    <div class="font-semibold text-slate-800">Guia rapido (para leigos)</div>
+    <div class="font-semibold text-slate-800">Guia rápido (para leigos)</div>
     <ol class="mt-2 list-decimal space-y-1 pl-4">
       <li>Se usar Gmail: host <b>smtp.gmail.com</b>, porta <b>587</b>, e <b>Usar TLS</b> ligado.</li>
-      <li>No campo usuario SMTP, coloque o e-mail que vai enviar as cobrancas.</li>
-      <li>No campo senha, use a <b>senha de app do Google</b> (nao e a senha normal da conta).</li>
+      <li>No campo usuário SMTP, coloque o e-mail que vai enviar as cobranças.</li>
+      <li>No campo senha, use a <b>senha de app do Google</b> (não é a senha normal da conta).</li>
       <li>Clique em <b>Salvar SMTP</b> e depois em <b>Enviar e-mail teste</b>.</li>
     </ol>
   </div>
@@ -313,7 +405,7 @@
     <input type="hidden" name="competence" value="{{ competence }}" />
     <input class="input" name="smtp_host" placeholder="SMTP host (ex: smtp.gmail.com)" value="{{ email_settings.smtp_host or '' }}" />
     <input class="input" name="smtp_port" placeholder="Porta (ex: 587)" value="{{ email_settings.smtp_port or '' }}" />
-    <input class="input" name="smtp_user" placeholder="Usuario SMTP (seu e-mail)" value="{{ email_settings.smtp_user or '' }}" />
+    <input class="input" name="smtp_user" placeholder="Usuário SMTP (seu e-mail)" value="{{ email_settings.smtp_user or '' }}" />
     <input class="input" name="smtp_from" placeholder="Remetente (From)" value="{{ email_settings.smtp_from or '' }}" />
     <input class="input md:col-span-2" type="password" name="smtp_pass" placeholder="Senha de app (deixe vazio para manter a atual)" value="" />
     <label class="flex items-center gap-2 md:col-span-2 text-xs text-slate-700">
@@ -322,36 +414,49 @@
     </label>
     <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-600">
       <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"><b>Host SMTP:</b> servidor de envio.</div>
-      <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"><b>Porta:</b> canal de conexao (Gmail: 587).</div>
-      <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"><b>Usuario SMTP:</b> login do e-mail remetente.</div>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"><b>Porta:</b> canal de conexão (Gmail: 587).</div>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"><b>Usuário SMTP:</b> login do e-mail remetente.</div>
       <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1"><b>Remetente:</b> e-mail que o cliente vai ver.</div>
-      <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 md:col-span-2"><b>Senha de app:</b> codigo de 16 caracteres gerado no Google.</div>
+      <div class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 md:col-span-2"><b>Senha de app:</b> código de 16 caracteres gerado no Google.</div>
     </div>
     <button class="btn btn-secondary ripple md:col-span-2 !px-4 !py-2">Salvar SMTP</button>
   </form>
   <form class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" method="post" action="/email/smtp/test">
     <input type="hidden" name="competence" value="{{ competence }}" />
     <input class="input md:col-span-2" name="to_email" type="email" placeholder="E-mail para teste" value="{{ email_settings.smtp_user or user.email or '' }}" required />
-    <div class="md:col-span-2 text-xs text-slate-500">Dica: use seu proprio e-mail primeiro para validar antes de enviar para clientes.</div>
+    <div class="md:col-span-2 text-xs text-slate-500">Dica: use seu próprio e-mail primeiro para validar antes de enviar para clientes.</div>
     <button class="btn btn-secondary ripple md:col-span-2 !px-4 !py-2">Enviar e-mail teste</button>
   </form>
   <div class="mt-2 text-xs text-amber-700">
-    Importante: senha normal do Gmail geralmente nao funciona no SMTP. Use senha de app.
+    Importante: senha normal do Gmail geralmente não funciona no SMTP. Use senha de app.
   </div>
   {% else %}
   <div class="mt-3 text-xs text-amber-700">
-    Somente usuarios admin podem alterar configuracao SMTP.
+    Somente usuários admin podem alterar configuração SMTP.
   </div>
   {% endif %}
 </div>
 
 <script>
   const competence = "{{ competence }}";
+
   document.getElementById("btnEnviar").addEventListener("click", async () => {
     try {
       const res = await postJSON(`/email/api/${competence}/enviar-lote`);
       document.getElementById("res").innerText = `Batch #${res.batch_id} | enviados=${res.sent} | falhas=${res.failed} | atrasados encontrados=${res.total}`;
       toast("Envio processado. Recarregando...", "ok");
+      setTimeout(() => location.reload(), 800);
+    } catch (e) {
+      toast(e.message, "erro");
+    }
+  });
+
+  document.getElementById("btnEnviarConstrutorasExterno").addEventListener("click", async () => {
+    try {
+      const res = await postJSON(`/email/api/${competence}/enviar-construtoras-anexo-externo`);
+      document.getElementById("res").innerText =
+        `Construtoras (anexo externo) | batch #${res.batch_id} | enviados=${res.sent} | falhas=${res.failed} | sem e-mail=${res.skipped_no_email} | sem anexo=${res.skipped_no_attachment} | anexo ausente=${res.skipped_missing_attachment}`;
+      toast("Envio com anexo externo processado. Recarregando...", "ok");
       setTimeout(() => location.reload(), 800);
     } catch (e) {
       toast(e.message, "erro");
@@ -387,7 +492,7 @@
     });
   }
 
-  // DataTables (lembretes, mensagens e construtoras)
+  // DataTables (lembretes, histórico, mensagens e construtoras)
   $(function () {
     const lang = {
       decimal: ",",
@@ -464,6 +569,19 @@
         autoWidth: false
       });
     }
+
+    if ($("#batchesTable").length) {
+      $("#batchesTable").DataTable({
+        pageLength: 5,
+        lengthMenu: [5, 10, 25, 50],
+        order: [[2, "desc"]],
+        language: lang,
+        autoWidth: false
+      });
+    }
   });
 </script>
 {% endblock %}
+
+
+

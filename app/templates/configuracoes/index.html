@@ -248,20 +248,31 @@
           <span class="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700">Cuidado</span>
         </div>
 
+        {% set cleanup_reason = request.query_params.get('reason') if request else None %}
         {% if request and request.query_params.get('danger') == 'ok' %}
           <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
             Limpeza executada com sucesso.
           </div>
         {% elif request and request.query_params.get('danger') == 'err' %}
           <div class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-            Não foi possível executar. Verifique a confirmação e selecione pelo menos uma opção.
+            {% if cleanup_reason == 'invalid_competence' %}
+              Competência inválida. Use YYYY-MM ou MM/YYYY.
+            {% elif cleanup_reason == 'no_selection' %}
+              Selecione ao menos uma opção de limpeza.
+            {% elif cleanup_reason == 'confirm' %}
+              Confirmação inválida. Use EXCLUIR (com competência) ou EXCLUIR TUDO (geral).
+            {% elif cleanup_reason == 'execution' %}
+              Erro interno ao executar a limpeza. Verifique o log do servidor.
+            {% else %}
+              Não foi possível executar. Verifique a confirmação e selecione pelo menos uma opção.
+            {% endif %}
           </div>
         {% endif %}
 
         <form class="mt-4 space-y-3 text-sm" method="post" action="/configuracoes/limpeza">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label class="text-xs font-semibold text-rose-700">Competência (YYYY-MM)</label>
+              <label class="text-xs font-semibold text-rose-700">Competência (YYYY-MM ou MM/YYYY)</label>
               <input name="competence" class="input mt-1" placeholder="2026-02" />
               <div class="mt-1 text-[11px] text-rose-700/70">
                 Preencha para excluir apenas da competência. Se vazio, exclui tudo.
@@ -282,12 +293,12 @@
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_installments" /> Excluir parcelas/recebíveis gerados</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_receivables_orphans" /> Limpar contratos sem parcelas</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_pagar" /> Excluir boletos a pagar (manual)</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_receber" /> Excluir boletos a receber (manual)</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_notas_fiscais" /> Excluir notas fiscais</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_receber" /> Excluir contas a receber (manual)</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_conciliacao" /> Excluir conciliação/OFX</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_balance_adjustments" /> Zerar ajustes da prestação de contas</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_logs" /> Excluir histórico (logs)</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_reports" /> Excluir relatórios/fechamentos</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_email_history" /> Excluir histórico de e-mails/lembretes</label>
           </div>
 
           <button class="btn btn-primary rounded-2xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">

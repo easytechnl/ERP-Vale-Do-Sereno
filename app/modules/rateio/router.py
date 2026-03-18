@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import json
+from pathlib import Path
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -9,6 +11,7 @@ from app.core.templating import templates
 from app.core.deps import get_db
 from app.modules.auth.utils import require_login
 
+from app.models.boletos_receber import BoletoAReceber
 from app.models.rateio import RateioCompany, RateioExpense
 
 from .service import (
@@ -22,11 +25,36 @@ from .pdf_summary import generate_rateio_summary_pdf_bytes
 
 
 router = APIRouter(tags=["divisao_custos"])
+SETTINGS_PATH = Path("data/configuracoes.json")
 
 
 def _redirect_back(competence: str | None) -> RedirectResponse:
     url = "/divisao-custos" + (f"?competence={competence}" if competence else "")
     return RedirectResponse(url=url, status_code=303)
+
+
+def _last_day_of_competence(competence: str):
+    import datetime as _dt
+
+    y, m = [int(x) for x in competence.split("-")[:2]]
+    if m == 12:
+        next_month = _dt.date(y + 1, 1, 1)
+    else:
+        next_month = _dt.date(y, m + 1, 1)
+    return next_month - _dt.timedelta(days=1)
+
+
+def _load_company_emails() -> dict[str, str]:
+    if not SETTINGS_PATH.exists():
+        return {}
+    try:
+        data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    val = data.get("company_emails") or {}
+    return val if isinstance(val, dict) else {}
 
 
 @router.get("/rateio")
@@ -167,6 +195,90 @@ def despesas_delete(
         db.delete(e)
         db.commit()
     return _redirect_back(competence)
+
+
+@router.post("/divisao-custos/salvar")
+def gerar_boletos_receber_da_divisao(
+    competence: str = Form(...),
+    due_date: str = Form(""),
+    user=Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    import datetime as _dt
+
+    preview = compute_divisao_custos(db=db, competence=competence)
+    companies = preview.get("companies") or []
+    if not companies:
+        return RedirectResponse(
+            url=f"/divisao-custos?competence={competence}&gerar_boletos=empty",
+            status_code=303,
+        )
+
+    resolved_due_date = _last_day_of_competence(competence)
+    if (due_date or "").strip():
+        try:
+            resolved_due_date = _dt.date.fromisoformat(due_date.strip())
+        except Exception:
+            pass
+
+    company_emails = _load_company_emails()
+    auto_description = f"Divisão de Custos ({competence})"
+
+    created = 0
+    updated = 0
+    skipped = 0
+
+    for company in companies:
+        company_id = int(company.get("id") or 0)
+        company_name = str(company.get("name") or "").strip()
+        amount = float(company.get("total") or 0.0)
+        if company_id <= 0 or not company_name or amount <= 0:
+            skipped += 1
+            continue
+
+        email = (company_emails.get(str(company_id)) or "").strip() or None
+
+        existing = (
+            db.query(BoletoAReceber)
+            .filter(BoletoAReceber.competence_month == competence)
+            .filter(BoletoAReceber.customer_name == company_name)
+            .filter(BoletoAReceber.description == auto_description)
+            .order_by(BoletoAReceber.id.desc())
+            .first()
+        )
+
+        if existing:
+            existing.customer_email = email or existing.customer_email
+            existing.due_date = resolved_due_date
+            existing.amount = amount
+            if (existing.status or "").upper().strip() != "PAGO":
+                existing.status = "A_VENCER"
+                existing.paid_at = None
+            updated += 1
+            continue
+
+        db.add(
+            BoletoAReceber(
+                competence_month=competence,
+                customer_name=company_name,
+                customer_email=email,
+                description=auto_description,
+                due_date=resolved_due_date,
+                amount=amount,
+                status="A_VENCER",
+            )
+        )
+        created += 1
+
+    db.commit()
+
+    return RedirectResponse(
+        url=(
+            f"/divisao-custos?competence={competence}"
+            f"&gerar_boletos=ok&created={created}&updated={updated}&skipped={skipped}"
+        ),
+        status_code=303,
+    )
 
 
 @router.post("/divisao-custos/construtoras")
@@ -371,5 +483,4 @@ def all_pdfs_zip(
     mem.seek(0)
     filename = f"divisao_custos_pdfs_{competence}.zip"
     return StreamingResponse(mem, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename={filename}"})
-
 

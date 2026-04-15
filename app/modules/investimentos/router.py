@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.templating import templates
-from app.core.utils import normalize_competence
+from app.core.utils import clamp_competence, current_competence
 from app.modules.auth.utils import require_login
 from app.modules.investimentos.pdf import investments_report_pdf_bytes
 from app.modules.investimentos.service import (
@@ -94,9 +94,7 @@ def investimentos_page(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    if not competence:
-        competence = date.today().strftime("%Y-%m")
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     months = sanitize_report_months(months)
 
     ensure_investment_schema(db)
@@ -168,7 +166,7 @@ def investimentos_create_account(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence) or competence
     try:
         parsed_opening_date = date.fromisoformat(opening_date)
     except Exception:
@@ -203,7 +201,7 @@ def investimentos_toggle_account(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence) or competence
     account = toggle_account_active(db, account_id)
     if not account:
         return RedirectResponse(
@@ -234,8 +232,8 @@ def investimentos_create_entry(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    competence = normalize_competence(competence) or competence
-    normalized_reference = normalize_competence(reference_month) if reference_month else None
+    competence = clamp_competence(competence) or competence
+    normalized_reference = clamp_competence(reference_month) if reference_month else None
     try:
         parsed_entry_date = date.fromisoformat(entry_date)
     except Exception:
@@ -295,7 +293,7 @@ def investimentos_delete_entry(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence) or competence
     deleted = delete_entry(db, entry_id)
     return RedirectResponse(
         _page_url(
@@ -320,7 +318,7 @@ def investimentos_report_csv(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    end = normalize_competence(end) or end
+    end = clamp_competence(end) or end
     months = sanitize_report_months(months)
     accounts = list_accounts(db, active_only=False)
     selected_account = next((item for item in accounts if item.id == account_id), None)
@@ -367,7 +365,7 @@ def investimentos_report_pdf(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    end = normalize_competence(end) or end
+    end = clamp_competence(end) or end
     months = sanitize_report_months(months)
     accounts = list_accounts(db, active_only=False)
     selected_account = next((account for account in accounts if account.id == account_id), None)

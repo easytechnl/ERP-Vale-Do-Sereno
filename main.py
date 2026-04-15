@@ -24,6 +24,7 @@ from app.modules.prestacao_contas.router import router as prestacao_contas_route
 from app.modules.investimentos.router import router as investimentos_router
 from app.modules.email.automation import start_email_automation, stop_email_automation
 from app.modules.investimentos.service import ensure_investment_schema
+from app.modules.boletos.service import ensure_boletos_pagar_schema
 
 app = FastAPI(title="ERP Financeiro (MVP)")
 
@@ -81,6 +82,7 @@ def on_startup():
     db = SessionLocal()
     try:
         ensure_investment_schema(db)
+        ensure_boletos_pagar_schema(db)
     finally:
         db.close()
     start_email_automation()

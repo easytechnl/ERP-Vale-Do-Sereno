@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+﻿{% extends "layout.html" %}
 {% set title = "Fechamento" %}
 {% set page_subtitle = "Feche a competência e congele relatórios com trilha." %}
 
@@ -40,7 +40,7 @@
     try {
       const res = await postJSON(`/relatorios/api/${competence}/fechar`);
       document.getElementById("res").innerText = `Status: ${res.status} | PDF: ${res.pdf_path || "-"} | Entradas: ${res.totals?.entradas?.toFixed ? res.totals.entradas.toFixed(2) : "-"}`;
-      toast("Fechamento processado. Recarregando...", "ok");
+      toast("Ação concluída", "ok");
       setTimeout(() => location.reload(), 800);
     } catch (e) {
       toast(e.message, "erro");
@@ -48,3 +48,4 @@
   });
 </script>
 {% endblock %}
+

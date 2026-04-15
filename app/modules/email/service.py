@@ -85,7 +85,7 @@ PRO_DEFAULT_BODY = """<div data-email-theme='vs-corp-v5' style='margin:0;padding
           Caso o pagamento ja tenha sido efetuado, por favor desconsidere esta mensagem.
         </p>
         <p style='margin:12px 0 0;color:#64748b;font-size:13px;line-height:1.6'>
-          Proximos passos: 1) Abra o anexo do boleto. 2) Efetue o pagamento ate o vencimento. 3) Se necessario, responda este e-mail.
+          Nao responda esse e-mail.
         </p>
       </td>
     </tr>
@@ -566,8 +566,7 @@ def send_companies_boleto_batch_for_competence(
             "<tr><td style='padding:8px;border:1px solid #e2e8f0;font-weight:700'>Vencimento</td>"
             f"<td style='padding:8px;border:1px solid #e2e8f0'>{due_br}</td></tr>"
             "</table>"
-            "<p style='margin-top:14px'>Em caso de dúvidas, responda este e-mail.</p>"
-            f"<p>Contato financeiro: <b>{support_email}</b></p>"
+            "<p style='margin-top:14px'>Nao responda esse e-mail.</p>"
             "</div>"
         )
 
@@ -714,8 +713,7 @@ def send_companies_external_attachment_batch_for_competence(
             "</div>"
             "</td></tr>"
             "<tr><td style='padding:20px 28px 24px;border-top:1px solid #e2e8f0'>"
-            "<p style='margin:0;color:#334155;font-size:13px;line-height:1.6'>Permanecemos a disposicao para quaisquer esclarecimentos.</p>"
-            f"<p style='margin:6px 0 0;color:#334155;font-size:13px;line-height:1.6'>Contato do financeiro: <a href='mailto:{support_email}' style='color:#065f46;font-weight:700;text-decoration:none'>{support_email}</a></p>"
+            "<p style='margin:0;color:#334155;font-size:13px;line-height:1.6'>Nao responda esse e-mail.</p>"
             "<p style='margin:10px 0 0;color:#0f172a;font-size:13px;line-height:1.6;font-weight:700'>Atenciosamente,<br/>Equipe Financeira - Vale do Sereno</p>"
             "</td></tr>"
             "</table>"

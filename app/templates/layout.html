@@ -1,9 +1,50 @@
-<!DOCTYPE html>
-<html lang="pt-BR" class="h-full dark">
+﻿<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{{ title or "ERP Financeiro" }}</title>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const readStoredTheme = () => {
+        try {
+          const saved = localStorage.getItem("theme");
+          if (saved === "dark" || saved === "light") return saved;
+        } catch (_) {}
+        return "dark";
+      };
+      const applyThemeState = (theme) => {
+        const resolved = theme === "light" ? "light" : "dark";
+        root.classList.toggle("dark", resolved === "dark");
+        root.dataset.theme = resolved;
+        return resolved;
+      };
+      const broadcastTheme = (theme) => {
+        try {
+          document.dispatchEvent(new CustomEvent("erp:themechange", { detail: { theme } }));
+        } catch (_) {}
+      };
+      const api = {
+        get() {
+          return root.classList.contains("dark") ? "dark" : "light";
+        },
+        apply(theme) {
+          const resolved = applyThemeState(theme);
+          try {
+            localStorage.setItem("theme", resolved);
+          } catch (_) {}
+          broadcastTheme(resolved);
+          return resolved;
+        },
+        toggle() {
+          return api.apply(api.get() === "dark" ? "light" : "dark");
+        },
+      };
+      applyThemeState(readStoredTheme());
+      window.__erpTheme = api;
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -53,7 +94,7 @@
   </script>
 
   <!-- Icons (Lucide) -->
-  <script src="https://unpkg.com/lucide@0.465.0/dist/umd/lucide.min.js"></script>
+  <script src="/static/vendor/lucide.min.js?v=20260409-1"></script>
 
   <!-- GSAP -->
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
@@ -581,28 +622,46 @@
 
     /* Brand badge (topbar) */
     .brand-badge{
-      height: 44px;
-      width: 44px;
-      border-radius: 14px;
+      height: 56px;
+      width: 152px;
+      min-width: 152px;
+      flex-shrink: 0;
       display:flex;
       align-items:center;
       justify-content:center;
-      background: linear-gradient(135deg, rgba(16,185,129,.18), rgba(250,204,21,.18));
-      border: 1px solid rgba(16,185,129,.35);
-      box-shadow:
-        0 12px 26px rgba(15,23,42,.16),
-        inset 0 1px 0 rgba(255,255,255,.8);
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      padding: 0;
+      overflow: hidden;
     }
     .dark .brand-badge{
-      background: linear-gradient(135deg, rgba(16,185,129,.22), rgba(250,204,21,.18));
-      box-shadow:
-        0 14px 30px rgba(0,0,0,.45),
-        inset 0 1px 0 rgba(255,255,255,.12);
+      background: transparent;
+      box-shadow: none;
     }
     .brand-badge img{
-      width: 28px;
-      height: 28px;
+      width: 100%;
+      height: 100%;
       object-fit: contain;
+      object-position: center;
+    }
+    @media (min-width: 640px){
+      .brand-badge{
+        height: 68px;
+        width: 192px;
+        min-width: 192px;
+      }
+      .brand-badge img{
+        width: 100%;
+        height: 100%;
+      }
+    }
+    @media (min-width: 1024px){
+      .brand-badge{
+        height: 78px;
+        width: 228px;
+        min-width: 228px;
+      }
     }
 
     /* Sidebar extras */
@@ -1168,7 +1227,7 @@
           <aside id="app-sidebar" class="hidden md:block col-span-12 lg:col-span-3 xl:col-span-2 self-start">
             <div class="rounded-[24px] border border-slate-200 bg-white sticky top-4 overflow-hidden h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] flex flex-col">
               <div class="flex items-center gap-3 px-4 py-4 border-b border-slate-100 bg-slate-50/70">
-                <div class="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden shadow-soft">
+                <div class="h-[4.5rem] w-[4.5rem] shrink-0 rounded-[1.35rem] bg-white border border-slate-200 flex items-center justify-center overflow-hidden shadow-soft">
                   <img src="/static/branding/arcvsctudo.png" alt="ARCVS" class="h-full w-full object-contain p-1" />
                 </div>
                 <div class="min-w-0">
@@ -1199,13 +1258,13 @@
                         <p class="text-xs text-slate-500 dark:text-slate-400">Entrada e saída</p>
                       </div>
                     </a>
-                    <a class="quick-tile" href="/boletos?competence={{ competence }}" data-tip="Gerar e importar boletos">
-                      <span class="h-8 w-8 rounded-xl bg-amber-400/20 text-amber-700 dark:text-amber-300 flex items-center justify-center">
-                        <i data-lucide="barcode" class="h-4 w-4"></i>
+                    <a class="quick-tile" href="/boletos/cadastro?competence={{ competence }}" data-tip="Cadastrar contas a pagar">
+                      <span class="h-8 w-8 rounded-xl bg-lime-400/20 text-lime-700 dark:text-lime-300 flex items-center justify-center">
+                        <i data-lucide="file-plus-2" class="h-4 w-4"></i>
                       </span>
                       <div>
-                        <p>Boletos / CNAB</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">Cobrança em lote</p>
+                        <p>Contas a Pagar</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Despesas manuais</p>
                       </div>
                     </a>
                     <a class="quick-tile" href="/relatorios?end={{ competence }}" data-tip="Gerar relatórios rápidos">
@@ -1272,26 +1331,14 @@
                   <p class="side-section-label"><span class="side-section-dot"></span> Cobran&ccedil;as e pagamentos</p>
                 </div>
 
-                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3
-                          {% if _path.startswith('/boletos') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
-                   href="/boletos?competence={{ competence }}">
-                  <span class="h-10 w-10 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center icon-3d icon-amber">
-                    <i data-lucide="barcode" class="h-5 w-5 text-amber-600"></i>
-                  </span>
-                  <div class="min-w-0">
-                    <p class="nav-label">Boletos / CNAB</p>
-                    <p class="nav-sub truncate">Gere e importe boletos.</p>
-                  </div>
-                </a>
-
-                <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3
+<a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3
                           {% if _path.startswith('/boletos/cadastro') %}bg-brandGreen/10 text-brandDark dark:text-white border border-black/5 dark:border-white/10{% else %}hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-black/5 dark:hover:border-white/10{% endif %}"
                    href="/boletos/cadastro?competence={{ competence }}">
                   <span class="h-10 w-10 rounded-xl bg-white/60 dark:bg-white/10 border border-black/5 dark:border-white/10 flex items-center justify-center icon-3d icon-lime">
                     <i data-lucide="file-plus-2" class="h-5 w-5 text-lime-600"></i>
                   </span>
                   <div class="min-w-0">
-                    <p class="nav-label">Boletos a pagar</p>
+                    <p class="nav-label">Contas a Pagar</p>
                     <p class="nav-sub truncate">Cadastre despesas manualmente.</p>
                   </div>
                 </a>
@@ -1343,8 +1390,8 @@
                     <i data-lucide="bar-chart-3" class="h-5 w-5 text-orange-600"></i>
                   </span>
                   <div class="min-w-0">
-                    <p class="nav-label">Relat&oacute;rios</p>
-                    <p class="nav-sub truncate">Baixe relat&oacute;rios prontos.</p>
+                    <p class="nav-label">Relatórios</p>
+                    <p class="nav-sub truncate">Baixe relatórios prontos.</p>
                   </div>
                 </a>
 
@@ -1407,6 +1454,7 @@
                   <p class="text-sm text-slate-700 dark:text-slate-200">Opera&ccedil;&atilde;o normal</p>
                 </div>
                 <button id="themeBtn"
+                        type="button"
                         class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 hover:bg-white/90 dark:hover:bg-white/15"
                         data-tip="Alternar tema">
                   <i data-lucide="moon" class="h-4 w-4"></i>
@@ -1429,12 +1477,12 @@
             <!-- Topbar -->
             <div class="glass rounded-[20px] p-5 sm:p-6">
               <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="min-w-0 flex items-start gap-3">
-                  <button id="sidebarToggleBtn" type="button" class="mt-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-500" data-tip="Mostrar/ocultar menu">
+                <div class="min-w-0 flex items-center gap-3">
+                  <button id="sidebarToggleBtn" type="button" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-slate-500" data-tip="Mostrar/ocultar menu">
                     <i data-lucide="menu" class="h-4 w-4"></i>
                   </button>
                   <div class="brand-badge">
-                    <img src="/static/branding/arcvsctudo.png" alt="Logo do sistema" />
+                    <img src="/static/branding/arcvsctudo-cropped.png" alt="Logo do sistema" />
                   </div>
                   <div>
                   <h2 class="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white truncate">{{ _page_title }}</h2>
@@ -1504,8 +1552,7 @@
                     <p><b>Painel:</b> mostra resumo do m&ecirc;s e saldo.</p>
                     <p><b>Lan&ccedil;amentos:</b> adiciona receitas e despesas.</p>
                     <p><b>Cadastros:</b> cadastra clientes, contas e contatos.</p>
-                    <p><b>Boletos / CNAB:</b> gera/importa boletos.</p>
-                    <p><b>Boletos a pagar:</b> cria contas a pagar manualmente.</p>
+                    <p><b>Contas a Pagar:</b> cria contas a pagar manualmente.</p>
                     <p><b>Contas a receber:</b> cria cobran&ccedil;as manuais.</p>
                     <p><b>Extrato (OFX):</b> concilia com o banco.</p>
                     <p><b>Divis&atilde;o de Custos:</b> rateia custos por empresa.</p>
@@ -1571,7 +1618,7 @@
       });
     })();
   </script>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=20260409-1"></script>
   <script>
     (() => {
       const input = document.getElementById("menuSearchInput");
@@ -1633,6 +1680,8 @@
   {% block scripts_extra %}{% endblock %}
 </body>
 </html>
+
+
 
 
 

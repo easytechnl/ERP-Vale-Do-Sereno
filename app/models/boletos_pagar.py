@@ -25,6 +25,7 @@ class BoletoAPagar(Base):
 
     beneficiario: Mapped[str] = mapped_column(String(180), index=True)
     descricao: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    numero_nota_fiscal: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
 
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)

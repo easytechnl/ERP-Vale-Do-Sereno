@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.templating import templates
 from app.core.deps import get_db
-from app.core.utils import normalize_competence
+from app.core.utils import clamp_competence, current_competence
 from app.modules.auth.utils import require_login
 from app.modules.conciliacao.service import list_transactions, reconcile_transaction_to_installment, delete_statement_import
 from app.models.receber import Installment
@@ -14,8 +14,8 @@ from app.modules.conciliacao.ofx_service import import_ofx
 router = APIRouter(prefix="/conciliacao", tags=["conciliacao"])
 
 @router.get("")
-def conciliacao_page(request: Request, competence: str, user=Depends(require_login), db: Session = Depends(get_db)):
-    competence = normalize_competence(competence) or competence
+def conciliacao_page(request: Request, competence: str | None = None, user=Depends(require_login), db: Session = Depends(get_db)):
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     imports, txns = list_transactions(db, competence)
     # Mantido por compatibilidade, mas a UI do espelho do extrato não força conciliação por parcela.
     installments = db.query(Installment).filter(Installment.competence_month == competence).order_by(Installment.due_date.asc()).all()
@@ -33,6 +33,7 @@ def delete_import(
     db: Session = Depends(get_db),
 ):
     """Exclui um extrato importado (e suas transações) para manter o histórico limpo."""
+    competence = clamp_competence(competence) or competence
     delete_statement_import(db, import_id)
     return RedirectResponse(f"/conciliacao?competence={competence}", status_code=303)
 
@@ -44,6 +45,7 @@ async def upload_ofx(
     db: Session = Depends(get_db),
 ):
     """Importa um extrato OFX e gera o histórico (bank_transactions)."""
+    competence = clamp_competence(competence) or competence
     filename = (file.filename or "extrato.ofx").strip()
     lower = filename.lower()
 
@@ -61,6 +63,7 @@ async def upload_ofx(
 @router.post("/api/{competence}/upload-csv")
 async def upload_csv(competence: str, file: UploadFile = File(...), user=Depends(require_login), db: Session = Depends(get_db)):
     """Compatibilidade: caso enviem OFX aqui por engano, tenta importar; CSV segue como stub."""
+    competence = clamp_competence(competence) or competence
     filename = (file.filename or "").strip()
     lower = filename.lower()
     content = await file.read()
@@ -83,5 +86,6 @@ def conciliar(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     reconcile_transaction_to_installment(db, bank_txn_id, installment_id)
     return RedirectResponse(f"/conciliacao?competence={competence}", status_code=303)

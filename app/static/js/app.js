@@ -1,4 +1,4 @@
-// Global UI helpers for ERP (MVP)
+﻿// Global UI helpers for ERP (MVP)
 // - Theme toggle (dark/light)
 // - Lucide icons
 // - Tooltips (tippy)
@@ -9,7 +9,23 @@
 // - CountUp (if elements exist)
 // - Toast helper (existing)
 
+function normalizeToastType(type = "info") {
+  const value = String(type || "info").toLowerCase().trim();
+  if (["ok", "success", "sucesso"].includes(value)) return "ok";
+  if (["err", "error", "erro"].includes(value)) return "err";
+  if (["warn", "warning", "aviso"].includes(value)) return "warn";
+  return "info";
+}
+
+function defaultToastMessage(type) {
+  if (type === "ok") return "AÃ§Ã£o concluÃ­da";
+  if (type === "err") return "NÃ£o foi possÃ­vel concluir a aÃ§Ã£o.";
+  if (type === "warn") return "AtenÃ§Ã£o";
+  return "InformaÃ§Ã£o";
+}
+
 function toast(msg, type = "info") {
+  const normalizedType = normalizeToastType(type);
   const el = document.createElement("div");
   el.className = "fixed top-5 right-5 z-[9999] rounded-xl px-4 py-3 text-sm shadow-lg border";
   const colors = {
@@ -18,12 +34,36 @@ function toast(msg, type = "info") {
     warn: "bg-amber-50 text-amber-900 border-amber-200",
     err: "bg-rose-50 text-rose-900 border-rose-200",
   };
-  el.className += " " + (colors[type] || colors.info);
-  el.textContent = msg;
+  el.className += " " + (colors[normalizedType] || colors.info);
+  const text = String(msg || "").trim() || defaultToastMessage(normalizedType);
+  el.textContent = text;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3500);
 }
 
+function stripHtml(text) {
+  return String(text || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+async function extractErrorMessage(res) {
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    try {
+      const data = await res.json();
+      const detail = data?.detail;
+      if (Array.isArray(detail) && detail.length) {
+        return String(detail[0]?.msg || detail[0]?.message || defaultToastMessage("err")).trim();
+      }
+      if (typeof detail === "string" && detail.trim()) return detail.trim();
+      if (typeof data?.message === "string" && data.message.trim()) return data.message.trim();
+    } catch (_) {}
+  }
+  try {
+    const text = stripHtml(await res.text());
+    if (text) return text;
+  } catch (_) {}
+  return defaultToastMessage("err");
+}
 
 async function postJSON(url, payload = null) {
   const res = await fetch(url, {
@@ -31,32 +71,71 @@ async function postJSON(url, payload = null) {
     headers: { "Content-Type": "application/json" },
     body: payload ? JSON.stringify(payload) : null,
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await extractErrorMessage(res));
   return await res.json();
 }
 
 async function postForm(url, formData) {
   const res = await fetch(url, { method: "POST", body: formData });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(await extractErrorMessage(res));
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) return await res.json();
   return await res.text();
+}
+
+function getThemeController(root = document.documentElement) {
+  if (window.__erpTheme && typeof window.__erpTheme.apply === "function") {
+    return window.__erpTheme;
+  }
+
+  const applyTheme = (theme) => {
+    const resolved = theme === "light" ? "light" : "dark";
+    root.classList.toggle("dark", resolved === "dark");
+    root.dataset.theme = resolved;
+    try {
+      localStorage.setItem("theme", resolved);
+    } catch (_) {}
+    try {
+      document.dispatchEvent(new CustomEvent("erp:themechange", { detail: { theme: resolved } }));
+    } catch (_) {}
+    return resolved;
+  };
+
+  return {
+    get() {
+      return root.classList.contains("dark") ? "dark" : "light";
+    },
+    apply(theme) {
+      return applyTheme(theme);
+    },
+    toggle() {
+      return applyTheme(root.classList.contains("dark") ? "light" : "dark");
+    },
+  };
 }
 
 (function initERPUI() {
   const root = document.documentElement;
   const shell = document.getElementById("app-shell");
   const sidebarBtn = document.getElementById("sidebarToggleBtn");
+  const theme = getThemeController(root);
 
   // Year
   const yearEl = document.getElementById("year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-  // Theme from storage
+  // Feedback passed by redirects
   try {
-    const saved = localStorage.getItem("theme");
-    if (saved === "dark") root.classList.add("dark");
-    if (saved === "light") root.classList.remove("dark");
+    const currentUrl = new URL(window.location.href);
+    const toastType = currentUrl.searchParams.get("toast");
+    const toastMessage = currentUrl.searchParams.get("toast_message");
+    if (toastType) {
+      toast(toastMessage, toastType);
+      currentUrl.searchParams.delete("toast");
+      currentUrl.searchParams.delete("toast_message");
+      const nextUrl = currentUrl.pathname + (currentUrl.search ? currentUrl.search : "") + currentUrl.hash;
+      window.history.replaceState({}, document.title, nextUrl);
+    }
   } catch (_) {}
 
   // Compact mode (reduce animations/effects)
@@ -67,14 +146,33 @@ async function postForm(url, formData) {
 
   // Theme toggle
   const themeBtn = document.getElementById("themeBtn");
+  const themeToggle = document.getElementById("themeToggle");
+  const syncThemeControls = () => {
+    const isDark = theme.get() === "dark";
+    if (themeBtn) {
+      themeBtn.setAttribute("aria-pressed", isDark ? "true" : "false");
+      themeBtn.setAttribute("title", isDark ? "Alternar para tema claro" : "Alternar para tema escuro");
+      themeBtn.setAttribute("data-tip", isDark ? "Alternar para tema claro" : "Alternar para tema escuro");
+    }
+    if (themeToggle) {
+      themeToggle.checked = isDark;
+    }
+  };
+
   if (themeBtn) {
     themeBtn.addEventListener("click", () => {
-      root.classList.toggle("dark");
-      try {
-        localStorage.setItem("theme", root.classList.contains("dark") ? "dark" : "light");
-      } catch (_) {}
+      theme.toggle();
+      syncThemeControls();
     });
   }
+  if (themeToggle) {
+    themeToggle.addEventListener("change", () => {
+      theme.apply(themeToggle.checked ? "dark" : "light");
+      syncThemeControls();
+    });
+  }
+  document.addEventListener("erp:themechange", syncThemeControls);
+  syncThemeControls();
 
   // Lucide icons
   if (window.lucide && typeof window.lucide.createIcons === "function") {
@@ -140,7 +238,7 @@ async function postForm(url, formData) {
       if (best && best.el) {
         window.location.href = best.el.getAttribute("href");
       } else if (menuSearch.value.trim()) {
-        toast("Nenhum módulo encontrado", "warn");
+        toast("Nenhum mÃ³dulo encontrado", "warn");
       }
     });
     if (searchBtn) {
@@ -149,7 +247,7 @@ async function postForm(url, formData) {
         if (best && best.el) {
           window.location.href = best.el.getAttribute("href");
         } else if (menuSearch.value.trim()) {
-          toast("Nenhum módulo encontrado", "warn");
+          toast("Nenhum mÃ³dulo encontrado", "warn");
         } else {
           menuSearch.focus();
         }
@@ -167,18 +265,18 @@ async function postForm(url, formData) {
       await navigator.clipboard.writeText(text);
       toast("Mensagem copiada!", "ok");
     } catch (_) {
-      toast("Não consegui copiar. Copie manualmente.", "warn");
+      toast("NÃ£o consegui copiar. Copie manualmente.", "warn");
     }
   });
 
-  // Forms rápidos (ex.: atualizar status do boleto)
+  // Forms rÃ¡pidos (ex.: atualizar status do boleto)
   document.addEventListener("submit", async (e) => {
     const f = e.target.closest("form[data-status-form]");
     if (!f) return;
     e.preventDefault();
     try {
       await postForm(f.action, new FormData(f));
-      toast("Status atualizado. Atualizando...", "ok");
+      toast("Ação concluída", "ok");
       setTimeout(() => location.reload(), 600);
     } catch (err) {
       toast(String(err.message || err), "err");
@@ -290,3 +388,4 @@ async function postForm(url, formData) {
     } catch (_) {}
   }
 })();
+

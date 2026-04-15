@@ -15,11 +15,13 @@ Este projeto inclui o módulo **Divisão de Custos** (antigo “Rateio”), onde
 Na raiz do projeto:
 
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+> Este projeto está validado em **Python 3.12**. Evite criar a `.venv` com Python 3.14, pois dependências nativas como `pydantic-core`, `psycopg2`, `greenlet` e `httptools` precisam combinar exatamente com a versão do interpretador.
 
 ---
 
@@ -47,10 +49,10 @@ python -m app.scripts.init_db
 ## 4) Rodar o servidor
 
 ```powershell
-py run_dev.py
-# (ou: python run_dev.py)
+python run_dev.py
+# (ou, sem ativar a venv: .\.venv\Scripts\python.exe run_dev.py)
 # para porta customizada, ex.: 8010
-py run_dev.py --port 8010
+python run_dev.py --port 8010
 ```
 
 Acesse: `http://127.0.0.1:8000`
@@ -99,7 +101,7 @@ SELECT COUNT(*) FROM rateio_expenses;
 Se a pasta do projeto tiver espaço no nome, **não tem problema**, mas prefira sempre rodar:
 
 ```powershell
-py run_dev.py
+python run_dev.py
 ```
 
 (Esse entrypoint usa `if __name__ == "__main__"` e `freeze_support()` para evitar erro de spawn no Windows com `--reload`.)

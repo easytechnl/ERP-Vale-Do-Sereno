@@ -85,9 +85,9 @@ def list_entries(
         conds.append(LedgerEntry.kind == kind)
     if status:
         conds.append(LedgerEntry.status == status)
-    if bank_account_id:
+    if bank_account_id is not None:
         conds.append(LedgerEntry.bank_account_id == bank_account_id)
-    if customer_id:
+    if customer_id is not None:
         conds.append(LedgerEntry.customer_id == customer_id)
     if date_from:
         conds.append(LedgerEntry.entry_date >= date_from)
@@ -140,6 +140,51 @@ def create_entry(
         notes=notes,
     )
     db.add(ent)
+    db.commit()
+    db.refresh(ent)
+    return ent
+
+
+def get_entry(db: Session, entry_id: int) -> LedgerEntry | None:
+    ensure_ledger_entries_schema(db)
+    return db.get(LedgerEntry, entry_id)
+
+
+def update_entry(
+    db: Session,
+    entry_id: int,
+    *,
+    competence: str,
+    entry_date: date,
+    kind: str,
+    amount: float,
+    description: str,
+    document_number: Optional[str] = None,
+    status: str = "REALIZADO",
+    category: Optional[str] = None,
+    cost_center: Optional[str] = None,
+    bank_account_id: Optional[int] = None,
+    customer_id: Optional[int] = None,
+    notes: Optional[str] = None,
+) -> LedgerEntry | None:
+    ensure_ledger_entries_schema(db)
+    ent = db.get(LedgerEntry, entry_id)
+    if not ent:
+        return None
+
+    ent.competence_month = competence
+    ent.entry_date = entry_date
+    ent.kind = kind
+    ent.status = status
+    ent.amount = float(amount)
+    ent.description = description
+    ent.document_number = document_number or None
+    ent.category = category
+    ent.cost_center = cost_center
+    ent.bank_account_id = bank_account_id
+    ent.customer_id = customer_id
+    ent.notes = notes
+
     db.commit()
     db.refresh(ent)
     return ent

@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% set title = "Relatorios de Boletos" %}
-{% set page_subtitle = "Relatorios dos boletos das construtoras por status e um consolidado simples de data e valor." %}
+{% set page_subtitle = "Relatorios dos boletos das construtoras por status, apuracao de 5% sobre boletos pagos e um consolidado simples de data e valor." %}
 
 {% block content %}
 <div class="flex flex-col gap-6">
@@ -21,7 +21,7 @@
     <form class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4" method="get" action="/relatorios/boletos-receber">
       <div>
         <label class="text-xs text-slate-600">Competencia</label>
-        <input type="month" name="competence" value="{{ competence }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+        <input type="month" name="competence" value="{{ competence }}" min="{{ competence_min }}" max="{{ competence_max }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
       </div>
       <div class="md:col-span-3 flex items-end">
         <button class="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95" type="submit">
@@ -30,7 +30,7 @@
       </div>
     </form>
 
-    <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+    <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
       {% for item in data.highlights %}
       <div class="rounded-2xl border border-slate-200 bg-white p-4">
         <div class="text-xs text-slate-500">{{ item.label }}</div>
@@ -40,7 +40,7 @@
     </div>
 
     <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-      O relatorio <b>Boletos pagos</b> sai sem o nome da construtora. O consolidado <b>Boletos pagos + despesas do rateio</b> mostra somente <b>data</b> e <b>valor</b>.
+      Os relatorios <b>Boletos pagos</b> e <b>5% dos boletos pagos</b> saem sem o nome da construtora. O consolidado <b>Boletos pagos + despesas do rateio</b> mostra somente <b>data</b> e <b>valor</b>.
     </div>
   </div>
 

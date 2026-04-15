@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.templating import templates
 from app.core.deps import get_db
+from app.core.utils import clamp_competence, current_competence
 from app.modules.auth.utils import require_login
 from app.modules.prestacao_contas.service import prestacao_contas_data
 from app.modules.prestacao_contas.pdf import (
@@ -18,10 +19,11 @@ router = APIRouter(tags=["prestacao_contas"])
 @router.get("/prestacao-contas")
 def prestacao_contas_page(
     request: Request,
-    competence: str,
+    competence: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     data = prestacao_contas_data(db, competence)
     return templates.TemplateResponse(
         "prestacao_contas/index.html",
@@ -36,10 +38,11 @@ def prestacao_contas_page(
 
 @router.get("/prestacao-contas/pdf/boletos-previstos")
 def prestacao_pdf_boletos_previstos(
-    competence: str,
+    competence: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     data = prestacao_contas_data(db, competence)
     payload = {
         "competence": competence,
@@ -58,10 +61,11 @@ def prestacao_pdf_boletos_previstos(
 
 @router.get("/prestacao-contas/pdf/boletos-status")
 def prestacao_pdf_boletos_status(
-    competence: str,
+    competence: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     data = prestacao_contas_data(db, competence)
     payload = {
         "competence": competence,
@@ -78,10 +82,11 @@ def prestacao_pdf_boletos_status(
 
 @router.get("/prestacao-contas/pdf/resumo")
 def prestacao_pdf_resumo(
-    competence: str,
+    competence: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     data = prestacao_contas_data(db, competence)
     payload = {
         "competence": competence,

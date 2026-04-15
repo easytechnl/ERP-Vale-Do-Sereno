@@ -1,7 +1,8 @@
 from fastapi import Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from app.core.utils import COMPETENCE_MAX, COMPETENCE_MIN, CompetenceValidationError
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -37,6 +38,8 @@ def _competence_br(value: str | None) -> str:
 templates.env.filters["competence_br"] = _competence_br
 templates.env.filters["brl"] = _brl
 templates.env.filters["brl"] = _brl
+templates.env.globals["competence_min"] = COMPETENCE_MIN
+templates.env.globals["competence_max"] = COMPETENCE_MAX
 
 
 def register_exception_handlers(app):
@@ -52,4 +55,16 @@ def register_exception_handlers(app):
             "errors/http_error.html",
             {"request": request, "status_code": exc.status_code, "detail": exc.detail},
             status_code=exc.status_code,
+        )
+
+    @app.exception_handler(CompetenceValidationError)
+    async def competence_exception_handler(request: Request, exc: CompetenceValidationError):
+        accepts = (request.headers.get("accept") or "").lower()
+        wants_json = request.url.path.startswith("/api/") or "application/json" in accepts
+        if wants_json:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+        return templates.TemplateResponse(
+            "errors/http_error.html",
+            {"request": request, "status_code": 400, "detail": str(exc)},
+            status_code=400,
         )

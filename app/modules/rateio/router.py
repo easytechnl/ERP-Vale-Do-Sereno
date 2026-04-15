@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.core.templating import templates
 from app.core.deps import get_db
+from app.core.ui_feedback import toast_redirect, with_query_params
+from app.core.utils import clamp_competence, current_competence
 from app.modules.auth.utils import require_login
 
 from app.models.boletos_receber import BoletoAReceber
@@ -28,9 +30,48 @@ router = APIRouter(tags=["divisao_custos"])
 SETTINGS_PATH = Path("data/configuracoes.json")
 
 
+def _divisao_custos_url(competence: str | None) -> str:
+    return "/divisao-custos" + (f"?competence={competence}" if competence else "")
+
+
 def _redirect_back(competence: str | None) -> RedirectResponse:
-    url = "/divisao-custos" + (f"?competence={competence}" if competence else "")
-    return RedirectResponse(url=url, status_code=303)
+    return RedirectResponse(url=_divisao_custos_url(competence), status_code=303)
+
+
+def _parse_optional_number(raw: str, *, field_label: str) -> tuple[float | None, str | None]:
+    value = (raw or "").strip()
+    if not value:
+        return None, None
+
+    normalized = value.replace(" ", "")
+    if "," in normalized and "." in normalized and normalized.find(",") > normalized.find("."):
+        normalized = normalized.replace(".", "")
+    normalized = normalized.replace(",", ".")
+
+    try:
+        return float(normalized), None
+    except ValueError:
+        return None, f"Informe um valor numérico válido para {field_label}."
+
+
+def _parse_percentual_input(raw: str) -> tuple[float | None, str | None]:
+    value = (raw or "").strip()
+    if not value:
+        return None, None
+
+    normalized = value.replace(" ", "").replace("%", "")
+    if "," in normalized and "." in normalized and normalized.find(",") > normalized.find("."):
+        normalized = normalized.replace(".", "")
+    normalized = normalized.replace(",", ".")
+
+    try:
+        pct = float(normalized)
+    except ValueError:
+        return None, "Informe um percentual válido."
+
+    if pct > 1:
+        pct = pct / 100.0
+    return float(pct), None
 
 
 def _last_day_of_competence(competence: str):
@@ -61,6 +102,7 @@ def _load_company_emails() -> dict[str, str]:
 @router.get("/rateio/")
 def legacy_rateio_redirect(competence: str | None = None, user=Depends(require_login)):
     """Compatibilidade: rota antiga /rateio -> /divisao-custos."""
+    competence = clamp_competence(competence, fallback=current_competence()) if competence else None
     url = "/divisao-custos" + (f"?competence={competence}" if competence else "")
     return RedirectResponse(url=url, status_code=302)
 
@@ -78,7 +120,7 @@ def divisao_custos_page(
 
     log = logging.getLogger("divisao_custos")
 
-    competence = competence or datetime.date.today().strftime("%Y-%m")
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
 
     # Sincroniza construtoras/percentuais conforme DOCX base
     docx_path = get_percentual_docx_path()
@@ -122,10 +164,14 @@ def divisao_custos_page(
     for cu in companies_ui:
         r = by_id.get(int(cu["id"]))
         if r:
+            cu["valor_base"] = float(r.get("valor_base") or r.get("base") or 0.0)
+            cu["reserva"] = float(r.get("reserva") or 0.0)
             cu["valor_a_pagar"] = float(r.get("total") or 0.0)
             cu["percentual_used"] = float(r.get("percentual") or 0.0)
             cu["missing_percentual"] = bool(r.get("missing_percentual"))
         else:
+            cu["valor_base"] = 0.0
+            cu["reserva"] = 0.0
             cu["valor_a_pagar"] = 0.0
             cu["percentual_used"] = float(cu.get("percentual") or 0.0)
             cu["missing_percentual"] = not bool(cu.get("percentual") or 0.0)
@@ -161,6 +207,7 @@ def despesas_create(
 ):
     import datetime
 
+    competence = clamp_competence(competence) or competence
     # Se o usuário não informar data base, assumimos 1o dia da competência
     if not expense_date.strip():
         y, m = [int(x) for x in competence.split("-")]
@@ -180,7 +227,7 @@ def despesas_create(
     )
     db.add(e)
     db.commit()
-    return _redirect_back(competence)
+    return toast_redirect(_divisao_custos_url(competence))
 
 
 @router.post("/divisao-custos/despesas/{expense_id}/delete")
@@ -190,11 +237,17 @@ def despesas_delete(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     e = db.query(RateioExpense).get(expense_id)
     if e:
         db.delete(e)
         db.commit()
-    return _redirect_back(competence)
+        return toast_redirect(_divisao_custos_url(competence))
+    return toast_redirect(
+        _divisao_custos_url(competence),
+        kind="err",
+        message="Despesa não encontrada.",
+    )
 
 
 @router.post("/divisao-custos/salvar")
@@ -206,12 +259,14 @@ def gerar_boletos_receber_da_divisao(
 ):
     import datetime as _dt
 
+    competence = clamp_competence(competence) or competence
     preview = compute_divisao_custos(db=db, competence=competence)
     companies = preview.get("companies") or []
     if not companies:
-        return RedirectResponse(
-            url=f"/divisao-custos?competence={competence}&gerar_boletos=empty",
-            status_code=303,
+        return toast_redirect(
+            with_query_params(_divisao_custos_url(competence), gerar_boletos="empty"),
+            kind="err",
+            message="Nenhuma construtora elegível para gerar contas a receber.",
         )
 
     resolved_due_date = _last_day_of_competence(competence)
@@ -272,12 +327,14 @@ def gerar_boletos_receber_da_divisao(
 
     db.commit()
 
-    return RedirectResponse(
-        url=(
-            f"/divisao-custos?competence={competence}"
-            f"&gerar_boletos=ok&created={created}&updated={updated}&skipped={skipped}"
+    return toast_redirect(
+        with_query_params(
+            _divisao_custos_url(competence),
+            gerar_boletos="ok",
+            created=created,
+            updated=updated,
+            skipped=skipped,
         ),
-        status_code=303,
     )
 
 
@@ -294,23 +351,26 @@ def construtoras_create(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     # Cadastro manual (mantém para novas construtoras)
-    area_val = float(area_m2) if area_m2.strip() else None
+    name_value = (name or "").strip()
+    if not name_value:
+        return toast_redirect(
+            _divisao_custos_url(competence),
+            kind="err",
+            message="Informe o nome da construtora.",
+        )
+
+    area_val, area_error = _parse_optional_number(area_m2, field_label="área (m²)")
+    if area_error:
+        return toast_redirect(_divisao_custos_url(competence), kind="err", message=area_error)
     # Aceita 0,12 / 0.12 / 12 / 12% (salva sempre como FRAÇÃO)
-    pct_val = None
-    if percentual.strip():
-        raw = percentual.strip().replace(" ", "")
-        raw = raw.replace("%", "")
-        raw = raw.replace(",", ".")
-        try:
-            pct_val = float(raw)
-            if pct_val > 1:
-                pct_val = pct_val / 100.0
-        except Exception:
-            pct_val = None
+    pct_val, pct_error = _parse_percentual_input(percentual)
+    if pct_error:
+        return toast_redirect(_divisao_custos_url(competence), kind="err", message=pct_error)
 
     c = RateioCompany(
-        name=name.strip(),
+        name=name_value,
         legal_name=(legal_name.strip() or None),
         cnpj=(cnpj.strip() or None),
         area_m2=area_val,
@@ -320,7 +380,7 @@ def construtoras_create(
     )
     db.add(c)
     db.commit()
-    return _redirect_back(competence)
+    return toast_redirect(_divisao_custos_url(competence))
 
 
 @router.post("/divisao-custos/construtoras/{company_id}/update")
@@ -330,6 +390,7 @@ def construtoras_update(
     name: str = Form(""),
     legal_name: str = Form(""),
     cnpj: str = Form(""),
+    area_m2: str = Form(""),
     percentual: str = Form(""),
     notes: str = Form(""),
     user=Depends(require_login),
@@ -337,35 +398,42 @@ def construtoras_update(
 ):
     """Permite editar o percentual (e opcionalmente dados básicos) de uma construtora."""
 
+    competence = clamp_competence(competence) or competence
     c = db.query(RateioCompany).get(company_id)
     if not c:
-        return _redirect_back(competence)
+        return toast_redirect(
+            _divisao_custos_url(competence),
+            kind="err",
+            message="Construtora não encontrada.",
+        )
 
     # Atualiza campos opcionais (se vierem preenchidos)
-    if (name or "").strip():
-        c.name = name.strip()
-    if (legal_name or "").strip():
-        c.legal_name = legal_name.strip() or None
-    if (cnpj or "").strip():
-        c.cnpj = cnpj.strip() or None
-    if (notes or "").strip() or notes == "":
-        c.notes = notes.strip() or None
+    name_value = (name or "").strip()
+    if not name_value:
+        return toast_redirect(
+            _divisao_custos_url(competence),
+            kind="err",
+            message="Informe o nome da construtora.",
+        )
+
+    area_val, area_error = _parse_optional_number(area_m2, field_label="área (m²)")
+    if area_error:
+        return toast_redirect(_divisao_custos_url(competence), kind="err", message=area_error)
+
+    c.name = name_value
+    c.legal_name = (legal_name or "").strip() or None
+    c.cnpj = (cnpj or "").strip() or None
+    c.area_m2 = area_val
+    c.notes = (notes or "").strip() or None
 
     # Percentual: aceita 0,12 / 0.12 / 12 / 12% (salva sempre como FRAÇÃO)
-    if (percentual or "").strip():
-        raw = percentual.strip().replace(" ", "")
-        raw = raw.replace("%", "")
-        raw = raw.replace(",", ".")
-        try:
-            pct_val = float(raw)
-            if pct_val > 1:
-                pct_val = pct_val / 100.0
-            c.percentual = float(pct_val)
-        except Exception:
-            pass
+    pct_val, pct_error = _parse_percentual_input(percentual)
+    if pct_error:
+        return toast_redirect(_divisao_custos_url(competence), kind="err", message=pct_error)
+    c.percentual = pct_val
 
     db.commit()
-    return _redirect_back(competence)
+    return toast_redirect(_divisao_custos_url(competence))
 
 
 @router.post("/divisao-custos/construtoras/{company_id}/delete")
@@ -375,11 +443,17 @@ def construtoras_delete(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     c = db.query(RateioCompany).get(company_id)
     if c:
         db.delete(c)
         db.commit()
-    return _redirect_back(competence)
+        return toast_redirect(_divisao_custos_url(competence))
+    return toast_redirect(
+        _divisao_custos_url(competence),
+        kind="err",
+        message="Construtora não encontrada.",
+    )
 
 
 @router.get("/divisao-custos/pdf/{company_id}")
@@ -393,6 +467,7 @@ def company_pdf(
 
     import io
 
+    competence = clamp_competence(competence) or competence
     # garante sync (caso suba versão nova do DOCX)
     docx_path = get_percentual_docx_path()
     if docx_path.exists():
@@ -433,6 +508,7 @@ def rateio_summary_pdf(
     db: Session = Depends(get_db),
 ):
     """PDF resumo do rateio do mês (quanto cada construtora deve pagar)."""
+    competence = clamp_competence(competence) or competence
     data = compute_divisao_custos(db, competence)
     pdf_bytes = generate_rateio_summary_pdf_bytes(data)
     filename = f"rateio_resumo_{competence}.pdf"
@@ -452,6 +528,7 @@ def all_pdfs_zip(
     import io
     import zipfile
 
+    competence = clamp_competence(competence) or competence
     docx_path = get_percentual_docx_path()
     if docx_path.exists():
         ensure_companies_seeded_from_docx(db, docx_path)
@@ -483,4 +560,3 @@ def all_pdfs_zip(
     mem.seek(0)
     filename = f"divisao_custos_pdfs_{competence}.zip"
     return StreamingResponse(mem, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename={filename}"})
-

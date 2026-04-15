@@ -14,6 +14,7 @@ from app.models.boletos_receber import BoletoAReceber
 from app.models.saldo import BalanceAdjustment
 from app.models.customer import Customer
 from app.models.receber import Receivable
+from app.modules.boletos.service import ensure_boletos_pagar_schema
 
 
 def _is_paid_status(status: str | None) -> bool:
@@ -156,6 +157,7 @@ def boletos_stats_for_competence(db: Session, competence: str) -> dict:
 def boletos_pagar_stats_for_competence(db: Session, competence: str) -> dict:
     """Resumo de boletos cadastrados (contas a pagar) da competência."""
     today = dt.date.today()
+    ensure_boletos_pagar_schema(db)
 
     rows = (
         db.query(BoletoAPagar)

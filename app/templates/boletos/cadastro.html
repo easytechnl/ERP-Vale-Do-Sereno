@@ -1,19 +1,19 @@
-{% extends "layout.html" %}
-{% set title = "Boletos (Cadastro)" %}
-{% set page_subtitle = "Cadastre boletos a pagar e acompanhe o status." %}
+﻿{% extends "layout.html" %}
+{% set title = "Contas a Pagar" %}
+{% set page_subtitle = "Cadastre contas a pagar e acompanhe o status." %}
 
 {% block content %}
 <div class="space-y-6">
   <div class="glass rounded-3xl p-5 sm:p-6">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
-        <div class="text-sm font-semibold text-slate-700">Competência</div>
+        <div class="text-sm font-semibold text-slate-700">Competencia</div>
         <div class="text-sm text-slate-500">Cadastros manuais (contas a pagar).</div>
       </div>
       <form class="grid w-full gap-3 sm:grid-cols-2 lg:w-auto" method="get" action="/boletos/cadastro">
         <div>
-          <label class="mb-1 block text-xs font-medium text-slate-600">Competência</label>
-          <input class="input" name="competence" type="month" value="{{ competence }}" />
+          <label class="mb-1 block text-xs font-medium text-slate-600">Competencia</label>
+          <input class="input" name="competence" type="month" value="{{ competence }}" min="{{ competence_min }}" max="{{ competence_max }}" />
         </div>
         <div class="sm:self-end">
           <button class="btn btn-secondary ripple w-full">Aplicar</button>
@@ -46,13 +46,30 @@
 
   <div class="grid gap-6 xl:grid-cols-12">
     <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-4">
-      <div class="text-lg font-semibold text-slate-900">Cadastrar boleto a pagar</div>
+      <div class="text-lg font-semibold text-slate-900">Cadastrar conta a pagar</div>
       <form class="mt-4 space-y-3" method="post" action="/boletos/cadastro/create">
         <input type="hidden" name="competence" value="{{ competence }}" />
 
         <div>
-          <label class="mb-1 block text-xs font-medium text-slate-600">Beneficiário</label>
-          <input class="input" name="beneficiario" required placeholder="Ex: Concessionária de Energia" />
+          <label class="mb-1 block text-xs font-medium text-slate-600">Beneficiario</label>
+          <input id="beneficiarioInput" class="input" name="beneficiario" list="beneficiariosRecentes" required placeholder="Ex: Concessionaria de Energia" />
+          <datalist id="beneficiariosRecentes">
+            {% for item in recent_beneficiarios %}
+            <option value="{{ item }}"></option>
+            {% endfor %}
+          </datalist>
+          {% if recent_beneficiarios %}
+          <div class="mt-2">
+            <div class="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Recentes</div>
+            <div class="flex flex-wrap gap-2">
+              {% for item in recent_beneficiarios %}
+              <button type="button" class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50" data-beneficiario="{{ item }}">
+                {{ item }}
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
         </div>
         <div>
           <label class="mb-1 block text-xs font-medium text-slate-600">Valor (R$)</label>
@@ -71,27 +88,31 @@
           </select>
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-slate-600">Descrição (opcional)</label>
-          <input class="input" name="descricao" placeholder="Ex: Energia elétrica - sede" />
+          <label class="mb-1 block text-xs font-medium text-slate-600">Descricao (opcional)</label>
+          <input class="input" name="descricao" placeholder="Ex: Energia eletrica - sede" />
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-slate-600">Linha digitável / código de barras (opcional)</label>
-          <input class="input" name="digitable_line" placeholder="Linha digitável" />
+          <label class="mb-1 block text-xs font-medium text-slate-600">Numero da nota fiscal (opcional)</label>
+          <input class="input" name="numero_nota_fiscal" placeholder="Ex: NF 12345" />
         </div>
         <div>
-          <label class="mb-1 block text-xs font-medium text-slate-600">Observações (opcional)</label>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Linha digitavel / codigo de barras (opcional)</label>
+          <input class="input" name="digitable_line" placeholder="Linha digitavel" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-slate-600">Observacoes (opcional)</label>
           <input class="input" name="notes" placeholder="Opcional" />
         </div>
 
-        <button class="btn btn-primary ripple w-full bg-brandGreen">Adicionar boleto</button>
+        <button class="btn btn-primary ripple w-full bg-brandGreen">Adicionar conta</button>
       </form>
     </div>
 
     <div class="glass rounded-3xl p-5 sm:p-6 xl:col-span-8">
       <div class="mb-4 flex items-center justify-between">
         <div>
-          <div class="text-lg font-semibold text-slate-900">Boletos cadastrados</div>
-          <div class="text-sm text-slate-500">Visíveis: <b>{{ boletos|length }}</b></div>
+          <div class="text-lg font-semibold text-slate-900">Contas a pagar cadastradas</div>
+          <div class="text-sm text-slate-500">Visiveis: <b>{{ boletos|length }}</b></div>
         </div>
       </div>
 
@@ -100,6 +121,7 @@
           <thead class="bg-slate-50">
             <tr>
               <th class="text-left">Boleto</th>
+              <th class="text-left">NF</th>
               <th class="text-left">Vencimento</th>
               <th class="text-left">Valor</th>
               <th class="text-left">Status</th>
@@ -111,12 +133,13 @@
             <tr>
               <td>
                 <div class="font-medium text-slate-900">{{ b.beneficiario }}</div>
-                <div class="text-xs text-slate-500">{{ b.descricao or "—" }}</div>
+                <div class="text-xs text-slate-500">{{ b.descricao or "-" }}</div>
               </td>
+              <td class="text-sm text-slate-700">{{ b.numero_nota_fiscal or "-" }}</td>
               <td>
-                {{ b.due_date.strftime("%d/%m/%Y") if b.due_date else "—" }}
+                {{ b.due_date.strftime("%d/%m/%Y") if b.due_date else "-" }}
                 {% if b.overdue %}<span class="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">Vencido</span>{% endif %}
-                {% if b.due_soon %}<span class="ml-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Próximo</span>{% endif %}
+                {% if b.due_soon %}<span class="ml-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Proximo</span>{% endif %}
               </td>
               <td class="font-semibold text-slate-900">R$ {{ "%.2f"|format(b.amount) }}</td>
               <td>
@@ -142,7 +165,7 @@
             {% endfor %}
             {% if boletos|length == 0 %}
             <tr>
-              <td class="py-6 text-center text-sm text-slate-500" colspan="5">Nenhum boleto cadastrado para esta competência.</td>
+              <td class="py-6 text-center text-sm text-slate-500" colspan="6">Nenhuma conta cadastrada para esta competencia.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -152,3 +175,19 @@
   </div>
 </div>
 {% endblock %}
+
+{% block scripts_extra %}
+<script>
+  (() => {
+    const beneficiaryInput = document.getElementById('beneficiarioInput');
+    if (!beneficiaryInput) return;
+    document.querySelectorAll('[data-beneficiario]').forEach((button) => {
+      button.addEventListener('click', () => {
+        beneficiaryInput.value = button.dataset.beneficiario || '';
+        beneficiaryInput.focus();
+      });
+    });
+  })();
+</script>
+{% endblock %}
+

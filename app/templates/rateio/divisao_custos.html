@@ -16,7 +16,7 @@
     <form id="filters" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3" method="get" action="/divisao-custos">
       <div>
         <label class="block text-xs text-slate-500">Competência</label>
-        <input name="competence" type="month" value="{{ competence }}"
+        <input name="competence" type="month" value="{{ competence }}" min="{{ competence_min }}" max="{{ competence_max }}"
                class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
       </div>
 
@@ -239,6 +239,12 @@
       </div>
 
       <div>
+        <label class="block text-xs text-slate-500">Área (m²) (opcional)</label>
+        <input name="area_m2" placeholder="Ex: 2450,50"
+               class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
+      </div>
+
+      <div>
         <label class="block text-xs text-slate-500">Percentual (fração ou %)</label>
         <input name="percentual" placeholder="Ex: 0,12 (12%) ou 12"
                class="mt-1 w-full rounded-xl border border-slate-200 bg-white border-slate-200 px-3 py-2 text-sm" />
@@ -261,40 +267,82 @@
       <table class="min-w-full text-sm">
         <thead class="bg-slate-50 dark:bg-white/5 text-slate-500">
           <tr>
-            <th class="text-left font-semibold px-4 py-3">Construtora</th>
-            <th class="text-right font-semibold px-4 py-3">Percentual</th>
+            <th class="text-left font-semibold px-4 py-3">Dados editáveis</th>
+            <th class="text-right font-semibold px-4 py-3">Percentual usado</th>
             <th class="text-right font-semibold px-4 py-3">Base</th>
             <th class="text-right font-semibold px-4 py-3">Reserva (5%)</th>
             <th class="text-right font-semibold px-4 py-3">Total</th>
-            <th class="text-right font-semibold px-4 py-3"></th>
+            <th class="text-right font-semibold px-4 py-3">Ações</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-200 dark:divide-white/10">
-          {% for r in preview.companies %}
-            <tr class="hover:bg-black/5 dark:hover:bg-white/5">
-              <td class="px-4 py-3">
-                <div class="font-semibold">{{ r.name }}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400">{{ r.cnpj }}</div>
+          {% for c in companies %}
+            <tr class="align-top hover:bg-black/5 dark:hover:bg-white/5">
+              <td class="px-4 py-3 min-w-[420px]">
+                <form id="company-form-{{ c.id }}" class="space-y-3" method="post" action="/divisao-custos/construtoras/{{ c.id }}/update">
+                  <input type="hidden" name="competence" value="{{ competence }}" />
+                  <div>
+                    <label class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Nome</label>
+                    <input name="name" required value="{{ c.name }}"
+                           class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                      <label class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Razão social</label>
+                      <input name="legal_name" value="{{ c.legal_name }}"
+                             class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">CNPJ</label>
+                      <input name="cnpj" value="{{ c.cnpj }}"
+                             class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                      <label class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Área (m²)</label>
+                      <input name="area_m2" value="{{ ('%.2f'|format(c.area_m2)).replace('.', ',') if c.area_m2 else '' }}"
+                             placeholder="Ex: 2450,50"
+                             class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Percentual</label>
+                      <input name="percentual" value="{{ ('%.7f'|format(c.percentual)).replace('.', ',') if c.percentual else '' }}"
+                             placeholder="Ex: 0,12 ou 12"
+                             class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Observações</label>
+                    <input name="notes" value="{{ c.notes }}"
+                           class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />
+                  </div>
+                </form>
               </td>
-              <td class="px-4 py-3 text-right font-medium">
-                {# Exibe como na base (fração que soma 1,0), com % em texto menor #}
-                <div class="font-semibold">{{ ('%.7f'|format(r.percentual)).replace('.', ',') }}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400">({{ ('%.6f'|format(r.percentual*100)).replace('.', ',') }}%)</div>
+              <td class="px-4 py-3 text-right font-medium whitespace-nowrap">
+                <div class="font-semibold">{{ ('%.7f'|format(c.percentual_used)).replace('.', ',') }}</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">({{ ('%.6f'|format(c.percentual_used * 100)).replace('.', ',') }}%)</div>
+                {% if c.missing_percentual %}
+                  <div class="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-700">Sem percentual</div>
+                {% endif %}
               </td>
-              <td class="px-4 py-3 text-right font-semibold">R$ {{ '%.2f'|format(r.valor_base or 0) }}</td>
-              <td class="px-4 py-3 text-right font-semibold">R$ {{ '%.2f'|format(r.reserva or 0) }}</td>
-              <td class="px-4 py-3 text-right font-semibold text-brandGreen">R$ {{ '%.2f'|format(r.total) }}</td>
+              <td class="px-4 py-3 text-right font-semibold whitespace-nowrap">R$ {{ '%.2f'|format(c.valor_base or 0) }}</td>
+              <td class="px-4 py-3 text-right font-semibold whitespace-nowrap">R$ {{ '%.2f'|format(c.reserva or 0) }}</td>
+              <td class="px-4 py-3 text-right font-semibold text-brandGreen whitespace-nowrap">R$ {{ '%.2f'|format(c.valor_a_pagar or 0) }}</td>
               <td class="px-4 py-3 text-right">
-                <div class="flex justify-end gap-2">
-                  <a class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white bg-white border border-black/10 border-slate-200 hover:bg-white/90 dark:hover:bg-white/15"
-                     href="/divisao-custos/pdf/{{ r.id }}?competence={{ competence }}">
+                <div class="flex flex-col items-end gap-2">
+                  <button form="company-form-{{ c.id }}" class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-brandGreen text-white hover:opacity-95">
+                    <i data-lucide="save" class="h-4 w-4"></i>
+                    Salvar alterações
+                  </button>
+                  <a class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white border border-slate-200 hover:bg-white/90 dark:hover:bg-white/15"
+                     href="/divisao-custos/pdf/{{ c.id }}?competence={{ competence }}">
                     <i data-lucide="file-down" class="h-4 w-4"></i>
                     PDF
                   </a>
-
-                  <form method="post" action="/divisao-custos/construtoras/{{ r.id }}/delete" onsubmit="return confirm('Excluir esta construtora?')">
+                  <form method="post" action="/divisao-custos/construtoras/{{ c.id }}/delete" onsubmit="return confirm('Excluir esta construtora?')">
                     <input type="hidden" name="competence" value="{{ competence }}" />
-                    <button class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white bg-white border border-black/10 border-slate-200 hover:bg-white/90 dark:hover:bg-white/15">
+                    <button class="ripple inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold bg-white border border-slate-200 hover:bg-white/90 dark:hover:bg-white/15">
                       <i data-lucide="trash" class="h-4 w-4"></i>
                       Excluir
                     </button>

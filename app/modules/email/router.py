@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import quote_plus
 
-from fastapi import APIRouter, Request, Depends, Form, UploadFile, File
+from fastapi import APIRouter, Request, Depends, Form, UploadFile, File, HTTPException
 from fastapi.responses import RedirectResponse, FileResponse
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,8 @@ from app.core.config import settings
 from app.core.storage import competence_dir, write_bytes
 from app.core.templating import templates
 from app.core.deps import get_db
+from app.core.ui_feedback import toast_redirect, with_query_params
+from app.core.utils import clamp_competence, current_competence
 from app.modules.auth.utils import require_login, require_role
 from app.modules.email.smtp_service import send_email
 from app.modules.email.service import (
@@ -34,6 +35,13 @@ SETTINGS_PATH = Path("data/configuracoes.json")
 COMPANY_EXTERNAL_ATTACHMENTS_KEY = "company_external_attachments"
 MAX_EXTERNAL_ATTACHMENT_BYTES = 15 * 1024 * 1024
 ALLOWED_EXTERNAL_ATTACHMENT_SUFFIXES = {".pdf"}
+
+
+def _email_lote_url(competence: str, *, anchor: str | None = None, **params) -> str:
+    url = with_query_params("/email/lote", competence=competence, **params)
+    if anchor:
+        return f"{url}#{anchor}"
+    return url
 
 
 def _load_settings_data() -> dict:
@@ -255,14 +263,21 @@ def _email_logo_inline() -> tuple[str, list[tuple[Path, str]]]:
 @router.get("/lote")
 def email_lote_page(
     request: Request,
-    competence: str,
+    competence: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     batches = db.query(EmailBatch).filter(EmailBatch.competence_month == competence).order_by(EmailBatch.id.desc()).all()
     messages = []
     if batches:
-        messages = db.query(EmailMessage).filter(EmailMessage.batch_id == batches[0].id).order_by(EmailMessage.id.desc()).limit(50).all()
+        messages = (
+            db.query(EmailMessage)
+            .filter(EmailMessage.batch_id == batches[0].id)
+            .order_by(EmailMessage.id.desc())
+            .limit(50)
+            .all()
+        )
 
     company_emails = _load_company_emails()
     company_external_attachments = _load_company_external_attachments_for_competence(competence)
@@ -279,7 +294,7 @@ def email_lote_page(
             {
                 "id": c.id,
                 "name": c.name,
-                "email": (company_emails.get(str(c.id)) or ""),
+                "email": company_emails.get(str(c.id)) or "",
                 "external_attachment": attachment_info,
             }
         )
@@ -306,13 +321,23 @@ def email_lote_page(
 
 @router.post("/api/{competence}/enviar-lote")
 def api_enviar_lote(competence: str, user=Depends(require_login), db: Session = Depends(get_db)):
-    # Por padrão, o lote da tela envia apenas para clientes em atraso.
-    return send_batch_for_competence(db, competence, only_overdue=True)
+    competence = clamp_competence(competence) or competence
+    try:
+        return send_batch_for_competence(db, competence, only_overdue=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "Nao foi possivel enviar os e-mails.") from exc
 
 
 @router.post("/api/{competence}/enviar-construtoras")
 def api_enviar_lote_construtoras(competence: str, user=Depends(require_login), db: Session = Depends(get_db)):
-    return send_companies_boleto_batch_for_competence(db, competence)
+    competence = clamp_competence(competence) or competence
+    try:
+        return send_companies_boleto_batch_for_competence(db, competence)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc) or "Nao foi possivel enviar os boletos das construtoras.",
+        ) from exc
 
 
 @router.post("/api/{competence}/enviar-construtoras-anexo-externo")
@@ -321,7 +346,14 @@ def api_enviar_lote_construtoras_anexo_externo(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    return send_companies_external_attachment_batch_for_competence(db, competence)
+    competence = clamp_competence(competence) or competence
+    try:
+        return send_companies_external_attachment_batch_for_competence(db, competence)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc) or "Nao foi possivel enviar os anexos externos.",
+        ) from exc
 
 
 @router.post("/api/{competence}/enviar-todos-boletos")
@@ -330,19 +362,25 @@ def api_enviar_todos_boletos(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    # Botão "1 click": envia somente os boletos de construtoras com anexo externo.
-    external_result = send_companies_external_attachment_batch_for_competence(db, competence)
-    return {
-        "competence": competence,
-        "companies_external": external_result,
-        "total_sent": int(external_result.get("sent", 0)),
-        "total_failed": int(external_result.get("failed", 0)),
-    }
+    competence = clamp_competence(competence) or competence
+    try:
+        external_result = send_companies_external_attachment_batch_for_competence(db, competence)
+        return {
+            "competence": competence,
+            "companies_external": external_result,
+            "total_sent": int(external_result.get("sent", 0)),
+            "total_failed": int(external_result.get("failed", 0)),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "Nao foi possivel executar o envio.") from exc
 
 
 @router.post("/api/reminders/run-now")
 def api_run_due_reminders_now(user=Depends(require_login), db: Session = Depends(get_db)):
-    return send_due_soon_reminders(db)
+    try:
+        return send_due_soon_reminders(db)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "Nao foi possivel enviar os lembretes.") from exc
 
 
 @router.post("/reminders/send-selected")
@@ -353,6 +391,7 @@ def send_due_reminders_selected(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     result_std = send_due_soon_reminders_for_boleto_ids(db, boleto_ids=boleto_ids)
     result_manual = send_due_soon_manual_reminders_for_ids(db, manual_ids=manual_ids)
 
@@ -362,28 +401,20 @@ def send_due_reminders_selected(
     reasons = (result_std.get("skip_reasons") or []) + (result_manual.get("skip_reasons") or [])
 
     if sent_total > 0 and failed_total == 0:
-        msg = quote_plus(
-            f"Lembretes enviados com sucesso: enviados={sent_total}, pulados={skipped_total}."
-        )
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&due_reminder=ok&due_msg={msg}",
-            status_code=303,
-        )
+        return toast_redirect(_email_lote_url(competence, anchor="due-soon"))
 
     if sent_total > 0 and failed_total > 0:
-        msg = quote_plus(
-            f"Envio parcial: enviados={sent_total}, falhas={failed_total}, pulados={skipped_total}."
-        )
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&due_reminder=warn&due_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="due-soon"),
+            kind="warn",
+            message=f"Envio parcial: enviados={sent_total}, falhas={failed_total}, pulados={skipped_total}.",
         )
 
     reason = reasons or ["Nenhum boleto elegivel para envio."]
-    msg = quote_plus(reason[0])
-    return RedirectResponse(
-        url=f"/email/lote?competence={competence}&due_reminder=err&due_msg={msg}",
-        status_code=303,
+    return toast_redirect(
+        _email_lote_url(competence, anchor="due-soon"),
+        kind="err",
+        message=reason[0],
     )
 
 
@@ -394,19 +425,16 @@ def send_due_reminder_single(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     result = send_due_soon_reminders_for_boleto_ids(db, boleto_ids=[boleto_id])
     if result["sent"] == 1 and result["failed"] == 0:
-        msg = quote_plus("Lembrete enviado com sucesso.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&due_reminder=ok&due_msg={msg}",
-            status_code=303,
-        )
+        return toast_redirect(_email_lote_url(competence, anchor="due-soon"))
 
     reason = result.get("skip_reasons") or ["Nao foi possivel enviar o lembrete."]
-    msg = quote_plus(reason[0])
-    return RedirectResponse(
-        url=f"/email/lote?competence={competence}&due_reminder=err&due_msg={msg}",
-        status_code=303,
+    return toast_redirect(
+        _email_lote_url(competence, anchor="due-soon"),
+        kind="err",
+        message=reason[0],
     )
 
 
@@ -418,12 +446,13 @@ def delete_due_reminder_single(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     b = db.query(Boleto).filter(Boleto.id == boleto_id).first()
     if not b or not b.installment_id:
-        msg = quote_plus("Boleto nao encontrado.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&due_reminder=err&due_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="due-soon"),
+            kind="err",
+            message="Boleto nao encontrado.",
         )
 
     resolved_days: int | None = None
@@ -441,21 +470,17 @@ def delete_due_reminder_single(
 
     rows = q.all()
     if not rows:
-        msg = quote_plus("Nenhum lembrete encontrado para exclusao.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&due_reminder=warn&due_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="due-soon"),
+            kind="warn",
+            message="Nenhum lembrete encontrado para exclusao.",
         )
 
     for row in rows:
         db.delete(row)
     db.commit()
 
-    msg = quote_plus("Lembrete excluido com sucesso. O envio foi liberado novamente.")
-    return RedirectResponse(
-        url=f"/email/lote?competence={competence}&due_reminder=ok&due_msg={msg}",
-        status_code=303,
-    )
+    return toast_redirect(_email_lote_url(competence, anchor="due-soon"))
 
 
 @router.post("/reminders/manual/{manual_id}/send")
@@ -465,19 +490,16 @@ def send_due_reminder_single_manual(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     result = send_due_soon_manual_reminders_for_ids(db, manual_ids=[manual_id])
     if result["sent"] == 1 and result["failed"] == 0:
-        msg = quote_plus("Lembrete enviado com sucesso.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&due_reminder=ok&due_msg={msg}",
-            status_code=303,
-        )
+        return toast_redirect(_email_lote_url(competence, anchor="due-soon"))
 
     reason = result.get("skip_reasons") or ["Nao foi possivel enviar o lembrete."]
-    msg = quote_plus(reason[0])
-    return RedirectResponse(
-        url=f"/email/lote?competence={competence}&due_reminder=err&due_msg={msg}",
-        status_code=303,
+    return toast_redirect(
+        _email_lote_url(competence, anchor="due-soon"),
+        kind="err",
+        message=reason[0],
     )
 
 
@@ -489,10 +511,25 @@ def update_construtora_email(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     company = db.query(RateioCompany).filter(RateioCompany.id == company_id).first()
-    if company:
-        _save_company_email(company_id, (email or "").strip())
-    return RedirectResponse(url=f"/email/lote?competence={competence}", status_code=303)
+    if not company:
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Construtora nao encontrada.",
+        )
+
+    email_value = (email or "").strip()
+    if email_value and not _is_reasonable_email(email_value):
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Informe um e-mail valido para a construtora.",
+        )
+
+    _save_company_email(company_id, email_value)
+    return toast_redirect(_email_lote_url(competence, anchor="companies"))
 
 
 @router.post("/construtoras/{company_id}/anexo-externo")
@@ -503,43 +540,44 @@ async def upload_construtora_anexo_externo(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     company = db.query(RateioCompany).filter(RateioCompany.id == company_id).first()
     if not company:
-        msg = quote_plus("Construtora nao encontrada.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&ext_attach=err&ext_attach_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Construtora nao encontrada.",
         )
 
     original_name = (attachment_file.filename or "").strip()
     if not original_name:
-        msg = quote_plus("Selecione um arquivo para upload.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&ext_attach=err&ext_attach_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Selecione um arquivo para upload.",
         )
 
     suffix = Path(original_name).suffix.lower()
     if suffix not in ALLOWED_EXTERNAL_ATTACHMENT_SUFFIXES:
-        msg = quote_plus("Formato invalido. Envie um arquivo PDF.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&ext_attach=err&ext_attach_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Formato invalido. Envie um arquivo PDF.",
         )
 
     raw = await attachment_file.read()
     if not raw:
-        msg = quote_plus("Arquivo vazio. Envie um PDF valido.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&ext_attach=err&ext_attach_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Arquivo vazio. Envie um PDF valido.",
         )
 
     if len(raw) > MAX_EXTERNAL_ATTACHMENT_BYTES:
-        msg = quote_plus("Arquivo muito grande. Limite de 15MB por anexo.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&ext_attach=err&ext_attach_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Arquivo muito grande. Limite de 15MB por anexo.",
         )
 
     file_token = _safe_filename_token(company.name)
@@ -554,11 +592,7 @@ async def upload_construtora_anexo_externo(
         original_name=original_name,
     )
 
-    msg = quote_plus(f"Anexo externo salvo para {company.name}.")
-    return RedirectResponse(
-        url=f"/email/lote?competence={competence}&ext_attach=ok&ext_attach_msg={msg}",
-        status_code=303,
-    )
+    return toast_redirect(_email_lote_url(competence, anchor="companies"))
 
 
 @router.post("/construtoras/{company_id}/anexo-externo/delete")
@@ -568,12 +602,13 @@ def delete_construtora_anexo_externo(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     company = db.query(RateioCompany).filter(RateioCompany.id == company_id).first()
     if not company:
-        msg = quote_plus("Construtora nao encontrada.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&ext_attach=err&ext_attach_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Construtora nao encontrada.",
         )
 
     removed_path = _remove_company_external_attachment(competence=competence, company_id=company_id)
@@ -585,11 +620,7 @@ def delete_construtora_anexo_externo(
         except Exception:
             pass
 
-    msg = quote_plus(f"Anexo externo removido para {company.name}.")
-    return RedirectResponse(
-        url=f"/email/lote?competence={competence}&ext_attach=ok&ext_attach_msg={msg}",
-        status_code=303,
-    )
+    return toast_redirect(_email_lote_url(competence, anchor="companies"))
 
 
 @router.get("/construtoras/{company_id}/anexo-externo/download")
@@ -599,17 +630,22 @@ def download_construtora_anexo_externo(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence) or competence
     company = db.query(RateioCompany).filter(RateioCompany.id == company_id).first()
     if not company:
-        return RedirectResponse(url=f"/email/lote?competence={competence}", status_code=303)
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Construtora nao encontrada.",
+        )
 
     attachments = _load_company_external_attachments_for_competence(competence)
     info = _normalize_company_external_attachment(attachments.get(str(company_id)))
     if not info or not info.get("exists"):
-        msg = quote_plus("Anexo externo nao encontrado para esta construtora.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&ext_attach=err&ext_attach_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="companies"),
+            kind="err",
+            message="Anexo externo nao encontrado para esta construtora.",
         )
 
     download_name = str(info.get("original_name") or info.get("file_name") or "boleto.pdf")
@@ -626,8 +662,9 @@ def update_email_automation_preferences(
     auto_due_reminder_emails: str | None = Form(None),
     user=Depends(require_login),
 ):
+    competence = clamp_competence(competence) or competence
     _save_auto_due_reminder_enabled(bool(auto_due_reminder_emails))
-    return RedirectResponse(url=f"/email/lote?competence={competence}", status_code=303)
+    return toast_redirect(_email_lote_url(competence, anchor="smtp"))
 
 
 @router.post("/smtp")
@@ -641,6 +678,7 @@ def update_email_smtp_settings(
     smtp_tls: str | None = Form(None),
     user=Depends(require_role("admin")),
 ):
+    competence = clamp_competence(competence) or competence
     data = _load_settings_data()
     email_cfg = data.get("email") or {}
     if not isinstance(email_cfg, dict):
@@ -657,9 +695,16 @@ def update_email_smtp_settings(
 
     if port_raw:
         try:
-            email_cfg["smtp_port"] = int(port_raw)
+            port_val = int(port_raw)
+            if port_val <= 0:
+                raise ValueError
+            email_cfg["smtp_port"] = port_val
         except ValueError:
-            email_cfg["smtp_port"] = port_raw
+            return toast_redirect(
+                _email_lote_url(competence, anchor="smtp"),
+                kind="err",
+                message="Informe uma porta SMTP valida.",
+            )
     else:
         email_cfg["smtp_port"] = ""
 
@@ -670,7 +715,7 @@ def update_email_smtp_settings(
 
     data["email"] = email_cfg
     _save_settings_data(data)
-    return RedirectResponse(url=f"/email/lote?competence={competence}&smtp=ok", status_code=303)
+    return toast_redirect(_email_lote_url(competence, anchor="smtp"))
 
 
 @router.post("/smtp/test")
@@ -679,17 +724,20 @@ def send_test_email(
     to_email: str = Form(""),
     user=Depends(require_role("admin")),
 ):
+    competence = clamp_competence(competence) or competence
     target = (to_email or "").strip()
     logo_html, inline_images = _email_logo_inline()
     if not target:
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&smtp_test=err&smtp_test_msg={quote_plus('Informe um e-mail destino.')}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="smtp"),
+            kind="err",
+            message="Informe um e-mail destino.",
         )
     if not _is_reasonable_email(target):
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&smtp_test=err&smtp_test_msg={quote_plus('Use um e-mail valido (ex: nome@dominio.com).')}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="smtp"),
+            kind="err",
+            message="Use um e-mail valido (ex: nome@dominio.com).",
         )
 
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -706,11 +754,10 @@ def send_test_email(
     try:
         send_email([target], subject, body, [], inline_images=inline_images)
     except Exception as exc:
-        msg = quote_plus(str(exc)[:220] or "Falha ao enviar e-mail de teste.")
-        return RedirectResponse(
-            url=f"/email/lote?competence={competence}&smtp_test=err&smtp_test_msg={msg}",
-            status_code=303,
+        return toast_redirect(
+            _email_lote_url(competence, anchor="smtp"),
+            kind="err",
+            message=str(exc)[:220] or "Falha ao enviar e-mail de teste.",
         )
 
-    return RedirectResponse(url=f"/email/lote?competence={competence}&smtp_test=ok", status_code=303)
-
+    return toast_redirect(_email_lote_url(competence, anchor="smtp"))

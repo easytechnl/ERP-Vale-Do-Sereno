@@ -10,7 +10,10 @@ from app.models.boletos_receber import BoletoAReceber
 from app.modules.rateio.service import list_expenses_for_competence
 
 
-REPORT_ORDER = ("paid", "due_soon", "overdue", "investment", "all")
+FIVE_PERCENT_RATE = Decimal("0.05")
+
+
+REPORT_ORDER = ("paid", "paid_5_percent", "due_soon", "overdue", "investment", "all")
 
 REPORT_META: dict[str, dict[str, str]] = {
     "paid": {
@@ -18,6 +21,12 @@ REPORT_META: dict[str, dict[str, str]] = {
         "description": "Somente boletos pagos. Este arquivo sai sem o nome da construtora.",
         "filename_base": "boletos_pagos_sem_construtora",
         "footnote": "Arquivo sem a coluna de cliente/construtora.",
+    },
+    "paid_5_percent": {
+        "title": "5% dos boletos pagos",
+        "description": "Apura 5% sobre o valor de todos os boletos pagos na competencia. Este arquivo sai sem o nome da construtora.",
+        "filename_base": "cinco_por_cento_boletos_pagos",
+        "footnote": "Arquivo sem a coluna de cliente/construtora e com o calculo de 5% sobre cada valor pago.",
     },
     "due_soon": {
         "title": "Boletos a vencer",
@@ -48,6 +57,10 @@ REPORT_META: dict[str, dict[str, str]] = {
 
 def _money(value: Any) -> float:
     return float(Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _percent_amount(value: Any, rate: Decimal = FIVE_PERCENT_RATE) -> float:
+    return _money(Decimal(str(value or 0)) * rate)
 
 
 def _brl(value: Any) -> str:
@@ -121,6 +134,7 @@ def _collect_items(db: Session, competence: str) -> list[dict[str, Any]]:
     for row in rows:
         raw_status = (row.status or "A_VENCER").upper().strip()
         amount = _money(row.amount)
+        fee_5_percent = _percent_amount(amount)
         paid_at_date = _as_date(getattr(row, "paid_at", None))
         is_paid = _is_paid_status(raw_status)
         is_overdue = bool(
@@ -144,6 +158,8 @@ def _collect_items(db: Session, competence: str) -> list[dict[str, Any]]:
                 "paid_at_text": _format_date(paid_at_date),
                 "amount": amount,
                 "amount_text": f"R$ {_brl(amount)}",
+                "fee_5_percent": fee_5_percent,
+                "fee_5_percent_text": f"R$ {_brl(fee_5_percent)}",
                 "status_raw": raw_status,
                 "status_label": "PAGO" if is_paid else ("VENCIDO" if is_overdue else "A VENCER"),
                 "is_paid": is_paid,
@@ -156,7 +172,7 @@ def _collect_items(db: Session, competence: str) -> list[dict[str, Any]]:
 
 
 def _select_items(report_key: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if report_key == "paid":
+    if report_key in {"paid", "paid_5_percent"}:
         return sorted([item for item in items if item["is_paid"]], key=_sort_paid, reverse=True)
     if report_key == "due_soon":
         return sorted([item for item in items if item["is_open"]], key=_sort_due)
@@ -176,6 +192,15 @@ def _columns_for(report_key: str) -> list[dict[str, Any]]:
             {"key": "description", "label": "Descricao", "width_mm": 72, "align": "left"},
             {"key": "status_label", "label": "Status", "width_mm": 18, "align": "center"},
             {"key": "amount_text", "label": "Valor pago", "width_mm": 22, "align": "right"},
+        ]
+    if report_key == "paid_5_percent":
+        return [
+            {"key": "competence_month", "label": "Competencia", "width_mm": 20, "align": "center"},
+            {"key": "paid_at_text", "label": "Pagamento", "width_mm": 24, "align": "center"},
+            {"key": "due_date_text", "label": "Vencimento", "width_mm": 24, "align": "center"},
+            {"key": "description", "label": "Descricao", "width_mm": 59, "align": "left"},
+            {"key": "amount_text", "label": "Valor pago", "width_mm": 27, "align": "right"},
+            {"key": "fee_5_percent_text", "label": "Valor 5%", "width_mm": 28, "align": "right"},
         ]
     if report_key == "investment":
         return [
@@ -204,6 +229,13 @@ def _columns_for(report_key: str) -> list[dict[str, Any]]:
 
 def _summary_lines(report_key: str, items: list[dict[str, Any]]) -> list[tuple[str, str]]:
     amount_total = _money(sum(item["amount"] for item in items))
+    if report_key == "paid_5_percent":
+        fee_total = _money(sum(item["fee_5_percent"] for item in items))
+        return [
+            ("Quantidade de boletos pagos", str(len(items))),
+            ("Total dos boletos pagos", f"R$ {_brl(amount_total)}"),
+            ("Total de 5%", f"R$ {_brl(fee_total)}"),
+        ]
     return [
         ("Quantidade de boletos", str(len(items))),
         ("Total do relatorio", f"R$ {_brl(amount_total)}"),
@@ -212,6 +244,13 @@ def _summary_lines(report_key: str, items: list[dict[str, Any]]) -> list[tuple[s
 
 def _card_metrics(report_key: str, items: list[dict[str, Any]]) -> list[dict[str, str]]:
     amount_total = _money(sum(item["amount"] for item in items))
+    if report_key == "paid_5_percent":
+        fee_total = _money(sum(item["fee_5_percent"] for item in items))
+        return [
+            {"label": "Boletos pagos", "value": str(len(items))},
+            {"label": "Total pago", "value": f"R$ {_brl(amount_total)}"},
+            {"label": "Total 5%", "value": f"R$ {_brl(fee_total)}"},
+        ]
     return [
         {"label": "Quantidade", "value": str(len(items))},
         {"label": "Total", "value": f"R$ {_brl(amount_total)}"},
@@ -353,11 +392,13 @@ def build_boleto_receber_report_bundle(db: Session, competence: str) -> dict[str
     paid_items = [item for item in items if item["is_paid"]]
     open_items = [item for item in items if item["is_open"]]
     overdue_items = [item for item in items if item["is_overdue"]]
+    five_percent_total = _money(sum(item["fee_5_percent"] for item in paid_items))
     rateio_total = _money(sum(_money(expense.get("amount")) for expense in list_expenses_for_competence(db, competence)))
 
     highlights = [
         {"label": "Todos os boletos", "value": str(len(items))},
         {"label": "Recebido no mes", "value": f"R$ {_brl(sum(item['amount'] for item in paid_items))}"},
+        {"label": "5% sobre pagos", "value": f"R$ {_brl(five_percent_total)}"},
         {"label": "A vencer", "value": f"R$ {_brl(sum(item['amount'] for item in open_items))}"},
         {"label": "Vencidos", "value": f"R$ {_brl(sum(item['amount'] for item in overdue_items))}"},
         {"label": "Pagos + rateio", "value": f"R$ {_brl(sum(item['amount'] for item in paid_items) + rateio_total)}"},

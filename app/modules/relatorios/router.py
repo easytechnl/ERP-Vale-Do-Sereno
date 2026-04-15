@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
 from app.core.templating import templates
-from app.core.utils import normalize_competence
+from app.core.utils import clamp_competence, current_competence
 from app.modules.auth.utils import require_login
 from app.modules.relatorios.service import (
     close_month,
@@ -94,9 +94,7 @@ def relatorios_home(
     db: Session = Depends(get_db),
 ):
     """Painel de relatórios (cards) — acessado ao clicar em "Relatórios"."""
-    import datetime
-
-    competence = normalize_competence(end) or datetime.date.today().strftime("%Y-%m")
+    competence = clamp_competence(end, fallback=current_competence()) or current_competence()
     close = get_or_create_monthly_close(db, competence)
 
     return templates.TemplateResponse(
@@ -117,9 +115,7 @@ def relatorios_boletos_receber_page(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    import datetime
-
-    competence = normalize_competence(competence) or datetime.date.today().strftime("%Y-%m")
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     data = build_boleto_receber_report_bundle(db, competence)
     return templates.TemplateResponse(
         "relatorios/boletos_receber.html",
@@ -139,7 +135,7 @@ def export_boletos_receber_csv(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence) or competence
     payload = build_boleto_receber_report(db, competence, report)
     return _csv_response(
         {
@@ -157,7 +153,7 @@ def export_boletos_receber_pdf(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence) or competence
     payload = build_boleto_receber_report(db, competence, report)
     pdf_bytes = boleto_receber_report_pdf_bytes(payload)
     return StreamingResponse(
@@ -170,10 +166,11 @@ def export_boletos_receber_pdf(
 @router.get("/fechamento")
 def fechamento_page(
     request: Request,
-    competence: str,
+    competence: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    competence = clamp_competence(competence, fallback=current_competence()) or current_competence()
     close = get_or_create_monthly_close(db, competence)
     snap = latest_demonstrativo(db, competence)
     return templates.TemplateResponse(
@@ -184,13 +181,13 @@ def fechamento_page(
 
 @router.post("/api/{competence}/fechar")
 def api_fechar(competence: str, user=Depends(require_login), db: Session = Depends(get_db)):
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence) or competence
     return close_month(db, competence)
 
 
 @router.get("/fechamento/pdf")
 def download_fechamento_pdf(competence: str, user=Depends(require_login), db: Session = Depends(get_db)):
-    competence = normalize_competence(competence) or competence
+    competence = clamp_competence(competence) or competence
     snap = latest_demonstrativo(db, competence)
     if not snap or not snap.pdf_path:
         return {"error": "Fechamento não gerado"}
@@ -200,12 +197,12 @@ def download_fechamento_pdf(competence: str, user=Depends(require_login), db: Se
 @router.get("/periodo")
 def periodo_page(
     request: Request,
-    end: str,
+    end: str | None = None,
     months: int = 6,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    end = normalize_competence(end) or end
+    end = clamp_competence(end, fallback=current_competence()) or current_competence()
     data = periodo_report(db, end_ym=end, months=months)
     return templates.TemplateResponse(
         "relatorios/periodo.html",
@@ -214,8 +211,8 @@ def periodo_page(
 
 
 @router.get("/periodo/pdf")
-def periodo_pdf(end: str, months: int = 6, user=Depends(require_login), db: Session = Depends(get_db)):
-    end = normalize_competence(end) or end
+def periodo_pdf(end: str | None = None, months: int = 6, user=Depends(require_login), db: Session = Depends(get_db)):
+    end = clamp_competence(end, fallback=current_competence()) or current_competence()
     path = generate_periodo_pdf_snapshot(db, end_ym=end, months=months)
     fname = f"relatorio_periodo_{end}_{months}m.pdf"
     return FileResponse(path=path, filename=fname, media_type="application/pdf")
@@ -229,8 +226,8 @@ def export_entradas_csv(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    start = normalize_competence(start) if start else None
-    end = normalize_competence(end) if end else None
+    start = clamp_competence(start) if start else None
+    end = clamp_competence(end) if end else None
     payload = list_lancamentos_for_export(db, kind="ENTRADA", start_ym=start, end_ym=end, status=status)
     fname = "entradas.csv" if not (start or end or status) else f"entradas_{start or 'ini'}_{end or 'fim'}_{status or 'todos'}.csv"
     return _csv_response(payload, fname)
@@ -244,8 +241,8 @@ def export_saidas_csv(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    start = normalize_competence(start) if start else None
-    end = normalize_competence(end) if end else None
+    start = clamp_competence(start) if start else None
+    end = clamp_competence(end) if end else None
     payload = list_lancamentos_for_export(db, kind="SAIDA", start_ym=start, end_ym=end, status=status)
     fname = "saidas.csv" if not (start or end or status) else f"saidas_{start or 'ini'}_{end or 'fim'}_{status or 'todos'}.csv"
     return _csv_response(payload, fname)
@@ -259,8 +256,8 @@ def export_completo_csv(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    start = normalize_competence(start) if start else None
-    end = normalize_competence(end) if end else None
+    start = clamp_competence(start) if start else None
+    end = clamp_competence(end) if end else None
     payload = list_lancamentos_for_export(db, kind=None, start_ym=start, end_ym=end, status=status)
     fname = "relatorio_completo.csv" if not (start or end or status) else f"relatorio_completo_{start or 'ini'}_{end or 'fim'}_{status or 'todos'}.csv"
     return _csv_response(payload, fname)
@@ -274,8 +271,8 @@ def export_entradas_pdf(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    start = normalize_competence(start) if start else None
-    end = normalize_competence(end) if end else None
+    start = clamp_competence(start) if start else None
+    end = clamp_competence(end) if end else None
     path = generate_lancamentos_pdf_export(
         db,
         kind="ENTRADA",
@@ -295,8 +292,8 @@ def export_saidas_pdf(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    start = normalize_competence(start) if start else None
-    end = normalize_competence(end) if end else None
+    start = clamp_competence(start) if start else None
+    end = clamp_competence(end) if end else None
     path = generate_lancamentos_pdf_export(
         db,
         kind="SAIDA",
@@ -316,8 +313,8 @@ def export_completo_pdf(
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
-    start = normalize_competence(start) if start else None
-    end = normalize_competence(end) if end else None
+    start = clamp_competence(start) if start else None
+    end = clamp_competence(end) if end else None
     path = generate_lancamentos_pdf_export(
         db,
         kind=None,

@@ -12,11 +12,11 @@
     <div class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
       <div>
         <label class="text-slate-600">Competência inicial</label>
-        <input id="expStart" type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="MM/AAAA" />
+        <input id="expStart" type="month" min="{{ competence_min }}" max="{{ competence_max }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="MM/AAAA" />
       </div>
       <div>
         <label class="text-slate-600">Competência final</label>
-        <input id="expEnd" type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="MM/AAAA" value="{{ competence }}" />
+        <input id="expEnd" type="month" min="{{ competence_min }}" max="{{ competence_max }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" placeholder="MM/AAAA" value="{{ competence }}" />
       </div>
       <div>
         <label class="text-slate-600">Status</label>
@@ -55,7 +55,7 @@
         <form class="grid grid-cols-1 md:grid-cols-3 gap-2" method="get" action="/relatorios/periodo">
           <div>
             <label class="text-xs text-slate-600">Mês final</label>
-            <input type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" name="end" value="{{ competence }}" placeholder="MM/AAAA" />
+            <input type="month" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" name="end" value="{{ competence }}" min="{{ competence_min }}" max="{{ competence_max }}" placeholder="MM/AAAA" />
           </div>
           <div>
             <label class="text-xs text-slate-600">Janela</label>
@@ -110,7 +110,7 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <div class="text-sm font-semibold">Relatórios de boletos das construtoras</div>
-          <div class="mt-1 text-xs text-slate-600">Exports de boletos pagos, a vencer, vencidos, visão completa e um consolidado simples de despesas do rateio + boletos pagos com data e valor.</div>
+          <div class="mt-1 text-xs text-slate-600">Exports de boletos pagos, apuração de 5% sobre pagos, a vencer, vencidos, visão completa e um consolidado simples de despesas do rateio + boletos pagos com data e valor.</div>
         </div>
         <a class="text-sm underline" href="/relatorios/boletos-receber?competence={{ competence }}">Abrir</a>
       </div>

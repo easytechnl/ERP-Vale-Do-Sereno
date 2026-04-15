@@ -5,7 +5,6 @@ import json
 import glob
 import os
 import logging
-import re
 import shutil
 import subprocess
 from datetime import datetime, timedelta
@@ -19,9 +18,12 @@ from sqlalchemy import text, inspect
 from app.core.config import settings
 from app.core.deps import get_db
 from app.core.templating import templates
+from app.core.ui_feedback import toast_redirect, with_query_params
 from app.core.security import hash_password
+from app.core.utils import supported_competence, current_competence
 from app.modules.auth.utils import require_login, require_role
 from app.models.audit import AuditLog
+from app.models.email import EmailBatch, EmailMessage
 from app.models.user import User
 
 router = APIRouter(prefix="/configuracoes", tags=["configuracoes"])
@@ -120,22 +122,22 @@ def _normalize_competence(value: str | None) -> str | None:
     raw = (value or "").strip()
     if not raw:
         return ""
+    return supported_competence(raw)
 
-    m_ym = re.fullmatch(r"(\d{4})-(\d{2})", raw)
-    if m_ym:
-        year, month = m_ym.group(1), m_ym.group(2)
-        if 1 <= int(month) <= 12:
-            return f"{year}-{month}"
+
+def _parse_optional_positive_int(value: str | None) -> int | None:
+    raw = (value or "").strip()
+    if not raw or not raw.isdigit():
         return None
+    parsed = int(raw)
+    return parsed if parsed > 0 else None
 
-    m_my = re.fullmatch(r"(\d{2})/(\d{4})", raw)
-    if m_my:
-        month, year = m_my.group(1), m_my.group(2)
-        if 1 <= int(month) <= 12:
-            return f"{year}-{month}"
-        return None
 
-    return None
+def _config_url(anchor: str | None = None, **params) -> str:
+    url = with_query_params("/configuracoes", **params)
+    if anchor:
+        return f"{url}#{anchor}"
+    return url
 
 
 def _sqlite_db_path() -> Path | None:
@@ -295,9 +297,9 @@ def _restore_backup_file(path: Path) -> None:
 @router.get("/")
 def configuracoes_home(
     request: Request,
-    limit: int = 50,
+    limit: int = 200,
     module: str | None = None,
-    user_id: int | None = None,
+    user_id: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     user=Depends(require_login),
@@ -325,11 +327,16 @@ def configuracoes_home(
         settings_data["status"] = status
         save_settings(settings_data)
 
+    resolved_user_id = _parse_optional_positive_int(user_id)
+    log_filter_error = ""
+    if (user_id or "").strip() and resolved_user_id is None:
+        log_filter_error = "Selecione um usuario valido para filtrar os logs."
+
     q = db.query(AuditLog)
     if module:
         q = q.filter(AuditLog.entity == module)
-    if user_id:
-        q = q.filter(AuditLog.actor_user_id == user_id)
+    if resolved_user_id is not None:
+        q = q.filter(AuditLog.actor_user_id == resolved_user_id)
     dt_from = _parse_date(date_from)
     if dt_from:
         q = q.filter(AuditLog.created_at >= dt_from)
@@ -337,11 +344,20 @@ def configuracoes_home(
     if dt_to:
         q = q.filter(AuditLog.created_at < dt_to + timedelta(days=1))
 
-    logs = q.order_by(AuditLog.id.desc()).limit(min(max(limit, 10), 300)).all()
+    logs = q.order_by(AuditLog.id.desc()).limit(min(max(limit, 25), 300)).all()
 
     entities = [r[0] for r in db.query(AuditLog.entity).distinct().order_by(AuditLog.entity).all()]
 
     users = db.query(User).order_by(User.id.asc()).all()
+    user_map = {int(u.id): u for u in users}
+    email_batches = db.query(EmailBatch).order_by(EmailBatch.id.desc()).limit(120).all()
+    email_messages = (
+        db.query(EmailMessage, EmailBatch)
+        .join(EmailBatch, EmailMessage.batch_id == EmailBatch.id)
+        .order_by(EmailMessage.id.desc())
+        .limit(200)
+        .all()
+    )
 
     return templates.TemplateResponse(
         "configuracoes/index.html",
@@ -359,13 +375,18 @@ def configuracoes_home(
             "db_kind": db_kind,
             "logs": logs,
             "users": users,
+            "user_map": user_map,
             "entities": entities,
+            "email_batches": email_batches,
+            "email_messages": email_messages,
+            "email_history_competence": current_competence(),
             "filters": {
                 "module": module or "",
-                "user_id": user_id or "",
+                "user_id": resolved_user_id or "",
                 "date_from": date_from or "",
                 "date_to": date_to or "",
             },
+            "log_filter_error": log_filter_error,
             "limit": limit,
         },
     )
@@ -412,7 +433,7 @@ def update_preferences(
     )
     settings_data["preferences"] = prefs
     save_settings(settings_data)
-    return RedirectResponse("/configuracoes#geral", status_code=303)
+    return toast_redirect(_config_url("geral"))
 
 
 @router.post("/email")
@@ -439,9 +460,16 @@ def update_email_settings(
 
     if port_raw:
         try:
-            email_cfg["smtp_port"] = int(port_raw)
+            port_val = int(port_raw)
+            if port_val <= 0:
+                raise ValueError
+            email_cfg["smtp_port"] = port_val
         except ValueError:
-            email_cfg["smtp_port"] = port_raw
+            return toast_redirect(
+                _config_url("email"),
+                kind="err",
+                message="Informe uma porta SMTP valida.",
+            )
     else:
         email_cfg["smtp_port"] = ""
 
@@ -452,7 +480,7 @@ def update_email_settings(
 
     settings_data["email"] = email_cfg
     save_settings(settings_data)
-    return RedirectResponse("/configuracoes#email", status_code=303)
+    return toast_redirect(_config_url("email"))
 
 
 @router.post("/backup/trigger")
@@ -465,10 +493,16 @@ def trigger_backup(
         settings_data["last_backup"] = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
         settings_data["last_backup_path"] = str(target)
         settings_data["last_backup_error"] = None
+        save_settings(settings_data)
+        return toast_redirect(_config_url("backup"))
     except HTTPException as exc:
         settings_data["last_backup_error"] = str(exc.detail)
-    save_settings(settings_data)
-    return RedirectResponse("/configuracoes#backup", status_code=303)
+        save_settings(settings_data)
+        return toast_redirect(
+            _config_url("backup"),
+            kind="err",
+            message=str(exc.detail),
+        )
 
 
 @router.post("/backup/restore")
@@ -482,7 +516,11 @@ def restore_backup(
     if confirm_val != "RESTAURAR":
         settings_data["last_restore_error"] = "Confirmação inválida."
         save_settings(settings_data)
-        return RedirectResponse("/configuracoes#backup", status_code=303)
+        return toast_redirect(
+            _config_url("backup"),
+            kind="err",
+            message="Confirmação inválida para restauração.",
+        )
 
     backup_dir = Path(settings.STORAGE_DIR) / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -496,12 +534,18 @@ def restore_backup(
         _restore_backup_file(target)
         settings_data["last_restore"] = datetime.now().strftime("%d/%m/%Y, %H:%M:%S")
         settings_data["last_restore_error"] = None
+        save_settings(settings_data)
+        return toast_redirect(_config_url("backup"))
     except HTTPException as exc:
         settings_data["last_restore_error"] = str(exc.detail)
     except Exception as exc:
         settings_data["last_restore_error"] = str(exc)
     save_settings(settings_data)
-    return RedirectResponse("/configuracoes#backup", status_code=303)
+    return toast_redirect(
+        _config_url("backup"),
+        kind="err",
+        message=settings_data["last_restore_error"] or "Nao foi possivel restaurar o backup.",
+    )
 
 
 @router.post("/limpeza")
@@ -525,7 +569,11 @@ def cleanup_data(
     comp = _normalize_competence(competence)
     confirm_val = " ".join((confirm or "").strip().upper().split())
     if comp is None:
-        return RedirectResponse("/configuracoes?danger=err&reason=invalid_competence#limpeza", status_code=303)
+        return toast_redirect(
+            _config_url("limpeza"),
+            kind="err",
+            message="Competencia invalida. Use YYYY-MM ou MM/YYYY.",
+        )
 
     any_selected = any([
         delete_ledger,
@@ -541,14 +589,26 @@ def cleanup_data(
         delete_email_history,
     ])
     if not any_selected:
-        return RedirectResponse("/configuracoes?danger=err&reason=no_selection#limpeza", status_code=303)
+        return toast_redirect(
+            _config_url("limpeza"),
+            kind="err",
+            message="Selecione ao menos uma opcao de limpeza.",
+        )
 
     if comp:
         if confirm_val not in {"EXCLUIR", "EXCLUIR TUDO"}:
-            return RedirectResponse("/configuracoes?danger=err&reason=confirm#limpeza", status_code=303)
+            return toast_redirect(
+                _config_url("limpeza"),
+                kind="err",
+                message="Confirmação invalida. Use EXCLUIR ou EXCLUIR TUDO.",
+            )
     else:
         if confirm_val != "EXCLUIR TUDO":
-            return RedirectResponse("/configuracoes?danger=err&reason=confirm#limpeza", status_code=303)
+            return toast_redirect(
+                _config_url("limpeza"),
+                kind="err",
+                message="Para limpeza geral, digite EXCLUIR TUDO.",
+            )
 
     try:
         table_names = set(inspect(db.get_bind()).get_table_names())
@@ -774,9 +834,13 @@ def cleanup_data(
     except Exception:
         db.rollback()
         logger.exception("Falha na limpeza de dados. competencia=%s", comp or "ALL")
-        return RedirectResponse("/configuracoes?danger=err&reason=execution#limpeza", status_code=303)
+        return toast_redirect(
+            _config_url("limpeza"),
+            kind="err",
+            message="Erro interno ao executar a limpeza.",
+        )
 
-    return RedirectResponse("/configuracoes?danger=ok#limpeza", status_code=303)
+    return toast_redirect(_config_url("limpeza"))
 
 
 @router.get("/backup/download")
@@ -791,17 +855,18 @@ def download_backup(user=Depends(require_login)):
 @router.get("/logs.csv")
 def export_logs_csv(
     module: str | None = None,
-    user_id: int | None = None,
+    user_id: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     user=Depends(require_login),
     db: Session = Depends(get_db),
 ):
+    resolved_user_id = _parse_optional_positive_int(user_id)
     q = db.query(AuditLog)
     if module:
         q = q.filter(AuditLog.entity == module)
-    if user_id:
-        q = q.filter(AuditLog.actor_user_id == user_id)
+    if resolved_user_id is not None:
+        q = q.filter(AuditLog.actor_user_id == resolved_user_id)
     dt_from = _parse_date(date_from)
     if dt_from:
         q = q.filter(AuditLog.created_at >= dt_from)
@@ -868,7 +933,11 @@ def create_user(
     email_norm = email.strip().lower()
     exists = db.query(User).filter(User.email == email_norm).first()
     if exists:
-        raise HTTPException(status_code=400, detail="E-mail já cadastrado.")
+        return toast_redirect(
+            _config_url("usuarios"),
+            kind="err",
+            message="E-mail ja cadastrado.",
+        )
     new_user = User(
         name=name.strip(),
         email=email_norm,
@@ -878,7 +947,7 @@ def create_user(
     )
     db.add(new_user)
     db.commit()
-    return RedirectResponse("/configuracoes#usuarios", status_code=303)
+    return toast_redirect(_config_url("usuarios"))
 
 
 @router.post("/usuarios/{user_id}/toggle")
@@ -889,7 +958,11 @@ def toggle_user(
 ):
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+        return toast_redirect(
+            _config_url("usuarios"),
+            kind="err",
+            message="Usuario nao encontrado.",
+        )
     target.is_active = not bool(target.is_active)
     db.commit()
-    return RedirectResponse("/configuracoes#usuarios", status_code=303)
+    return toast_redirect(_config_url("usuarios"))

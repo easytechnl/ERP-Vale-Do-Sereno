@@ -11,7 +11,7 @@
       Status do mês: <span class="font-semibold text-slate-800">{{ close.status }}</span>
     </div>
     <form class="mt-4 flex flex-wrap items-center gap-2" method="get" action="/">
-      <input type="month" name="competence" value="{{ competence }}" class="input" />
+      <input type="month" name="competence" value="{{ competence }}" min="{{ competence_min }}" max="{{ competence_max }}" class="input" />
       <button class="btn btn-secondary" type="submit">Atualizar</button>
     </form>
     <div class="mt-5 flex flex-wrap gap-2">
@@ -85,7 +85,7 @@
     <div class="text-sm font-semibold">Wizard do mês (MVP)</div>
     <div class="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
       <div class="flex items-center justify-between"><span>1) Gerar parcelas</span><a class="btn btn-secondary" href="/receber?competence={{ competence }}">Abrir</a></div>
-      <div class="flex items-center justify-between"><span>2) Gerar boletos e remessa</span><a class="btn btn-secondary" href="/boletos?competence={{ competence }}">Abrir</a></div>
+      <div class="flex items-center justify-between"><span>2) Contas a pagar</span><a class="btn btn-secondary" href="/boletos/cadastro?competence={{ competence }}">Abrir</a></div>
       <div class="flex items-center justify-between"><span>3) Importar extrato e conciliar</span><a class="btn btn-secondary" href="/conciliacao?competence={{ competence }}">Abrir</a></div>
       <div class="flex items-center justify-between"><span>4) Fechar competência</span><a class="btn btn-secondary" href="/relatorios?end={{ competence }}">Abrir</a></div>
       <div class="flex items-center justify-between"><span>5) Enviar e-mails em lote</span><a class="btn btn-secondary" href="/email/lote?competence={{ competence }}">Abrir</a></div>
@@ -102,7 +102,7 @@
       <a class="btn btn-secondary" href="/relatorios?end={{ competence }}">Relatórios</a>
     </div>
     <ul class="mt-3 list-disc pl-5 text-sm text-slate-700 space-y-2">
-      <li>Importação de <b>OFX/QFX</b> na Conciliação já gera o histórico automaticamente. CNAB segue em modo <b>stub</b> até você plugar o banco/layout real.</li>
+      <li>Importação de <b>OFX/QFX</b> na Conciliação já gera o histórico automaticamente. O fluxo de cobrança em lote permanece interno, sem exposição no MVP.</li>
       <li>PDFs são gerados com ReportLab (sem dependências do sistema).</li>
       <li>Banco padrão é SQLite para rodar “agora”. Para Postgres, ajuste <code>DATABASE_URL</code>.</li>
     </ul>
@@ -125,7 +125,7 @@
       const fd = new FormData(add);
       const res = await fetch(add.action, {method:'POST', body:fd});
       if(!res.ok){ toast('Erro ao salvar ajuste', 'err'); return; }
-      toast('Ajuste salvo. Atualizando...', 'ok');
+      toast('Ação concluída', 'ok');
       setTimeout(()=>location.reload(), 600);
     });
     const del = document.getElementById('formDelSaldo');
@@ -134,8 +134,10 @@
       const fd = new FormData(del);
       const res = await fetch(del.action, {method:'POST', body:fd});
       if(!res.ok){ toast('Erro ao excluir ajuste', 'err'); return; }
-      toast('Ajuste removido. Atualizando...', 'ok');
+      toast('Ação concluída', 'ok');
       setTimeout(()=>location.reload(), 600);
     });
   })();
 </script>
+
+

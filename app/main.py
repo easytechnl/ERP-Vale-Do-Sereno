@@ -6,7 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from pathlib import Path
 
 from app.core.config import settings
-from app.core.db import SessionLocal
+from app.core.db import SessionLocal, explain_database_error
 from app.core.templating import register_exception_handlers
 from app.core.audit_context import audit_user_id, audit_ip
 from app.modules.auth.router import router as auth_router
@@ -83,6 +83,8 @@ def on_startup():
     try:
         ensure_ledger_entries_schema(db)
         ensure_investment_schema(db)
+    except Exception as exc:
+        raise explain_database_error(exc) from exc
     finally:
         db.close()
     start_email_automation()

@@ -1,14 +1,56 @@
 import random
 from datetime import date
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.models.receber import Installment
 from app.models.boletos import Boleto, CnabRemittance, CnabReturnImport, CnabEvent
+from app.models.boletos_pagar import BoletoAPagar
 from app.core.storage import competence_dir, write_bytes
 from app.modules.boletos.pdf import generate_boleto_pdf
 from app.modules.boletos.cnab.adapters import stub as cnab_adapter
 from app.models.bancos import BankAccount
 from app.models.lancamentos import LedgerEntry
+
+
+_BOLETOS_PAGAR_SCHEMA_OK = False
+
+
+def ensure_boletos_pagar_schema(db: Session) -> None:
+    """Garante colunas novas em bases antigas sem migração formal."""
+    global _BOLETOS_PAGAR_SCHEMA_OK
+    if _BOLETOS_PAGAR_SCHEMA_OK:
+        return
+
+    bind = db.get_bind()
+    insp = inspect(bind)
+    try:
+        cols = {c["name"] for c in insp.get_columns(BoletoAPagar.__tablename__)}
+    except Exception:
+        return
+
+    changed = False
+    if "numero_nota_fiscal" not in cols:
+        if bind.dialect.name == "sqlite":
+            db.execute(text("ALTER TABLE boletos_a_pagar ADD COLUMN numero_nota_fiscal VARCHAR(80)"))
+        else:
+            db.execute(text("ALTER TABLE boletos_a_pagar ADD COLUMN IF NOT EXISTS numero_nota_fiscal VARCHAR(80)"))
+        changed = True
+
+    if changed:
+        try:
+            db.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_boletos_a_pagar_numero_nota_fiscal "
+                    "ON boletos_a_pagar (numero_nota_fiscal)"
+                )
+            )
+        except Exception:
+            db.rollback()
+            return
+        db.commit()
+
+    _BOLETOS_PAGAR_SCHEMA_OK = True
 
 
 def _fake_linha_digitavel() -> str:

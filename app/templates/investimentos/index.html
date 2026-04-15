@@ -65,7 +65,7 @@
     <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
       <div>
         <label class="text-sm text-slate-600">Competencia</label>
-        <input type="month" name="competence" value="{{ competence }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
+        <input type="month" name="competence" value="{{ competence }}" min="{{ competence_min }}" max="{{ competence_max }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
       </div>
       <div>
         <label class="text-sm text-slate-600">Conta</label>
@@ -251,7 +251,7 @@
 
             <div>
               <label class="text-xs text-slate-500">Referencia do rendimento (opcional)</label>
-              <input type="month" name="reference_month" value="{{ competence }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
+              <input type="month" name="reference_month" value="{{ competence }}" min="{{ competence_min }}" max="{{ competence_max }}" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" />
             </div>
 
             <div>

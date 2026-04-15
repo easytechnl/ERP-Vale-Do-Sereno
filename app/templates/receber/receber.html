@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+﻿{% extends "layout.html" %}
 {% set title = "Contas a Receber" %}
 {% set page_subtitle = "Parcelas, status e geração de cobranças por competência." %}
 
@@ -41,7 +41,7 @@
         </tr>
         {% endfor %}
         {% if itens|length == 0 %}
-        <tr><td class="py-3 text-slate-600" colspan="4">Nenhuma parcela. Clique em “Gerar parcelas do mês”.</td></tr>
+        <tr><td class="py-3 text-slate-600" colspan="4">Nenhuma parcela. Clique em "Gerar parcelas do mês".</td></tr>
         {% endif %}
       </tbody>
     </table>
@@ -54,7 +54,7 @@
     try {
       const res = await postJSON(`/receber/api/${competence}/gerar-parcelas`);
       document.getElementById("parcelasResult").innerText = `Criadas: ${res.created} | Já existiam: ${res.skipped} | Vencimento padrão: ${res.due_date}`;
-      toast("Parcelas geradas. Recarregando...", "ok");
+      toast("Ação concluída", "ok");
       setTimeout(() => location.reload(), 800);
     } catch (e) {
       toast(e.message, "erro");
@@ -62,3 +62,4 @@
   });
 </script>
 {% endblock %}
+

@@ -1,353 +1,269 @@
-﻿{% extends "layout.html" %}
-{% set title = "Configurações do Sistema" %}
-{% set page_subtitle = "Gerencie preferências, monitore o sistema e mantenha backups atualizados." %}
+{% extends "layout.html" %}
+{% set title = "Configuracoes do Sistema" %}
+{% set page_subtitle = "Preferencias, logs, historico de e-mails e backup em um unico lugar." %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.tailwindcss.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.tailwindcss.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<style>
+  .dataTables_wrapper .dataTables_filter input,
+  .dataTables_wrapper .dataTables_length select {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 0.75rem !important;
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+  .dataTables_wrapper .dataTables_filter input { padding: 0.45rem 0.7rem !important; }
+  .dataTables_wrapper .dataTables_length select { padding: 0.35rem 1.8rem 0.35rem 0.65rem !important; }
+  .dataTables_wrapper .dataTables_paginate .paginate_button {
+    border-radius: 0.6rem !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #fff !important;
+    color: #334155 !important;
+    padding: 0.28rem 0.62rem !important;
+    margin-left: 0.25rem !important;
+  }
+  .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+    background: #059669 !important;
+    color: #fff !important;
+    border-color: #059669 !important;
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="flex flex-col gap-7">
-  <section class="glass p-7">
-    <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-      <div class="space-y-2">
-        <div class="text-xs uppercase tracking-[.2em] text-slate-400">Painel de administração</div>
-        <h2 class="text-2xl font-semibold text-slate-900">Configurações do Sistema</h2>
-        <p class="text-sm text-slate-500">Acompanhe preferências, monitore o sistema e mantenha o ambiente protegido.</p>
+<div class="space-y-6">
+  <section class="glass p-6">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <div class="text-xs uppercase tracking-[.2em] text-slate-400">Painel administrativo</div>
+        <h2 class="mt-2 text-2xl font-semibold text-slate-900">Configuracoes do Sistema</h2>
+        <p class="mt-1 text-sm text-slate-500">Monitore o ambiente, ajuste preferencias e acompanhe logs e envios.</p>
       </div>
-      <div class="flex flex-wrap items-center gap-3">
-        <button id="btnStatus" class="btn btn-primary rounded-full bg-slate-900">Ver status</button>
-        <button id="btnRefresh" class="btn btn-primary rounded-full bg-brandGreen shadow">Atualizar agora</button>
+      <div class="flex gap-3">
+        <button id="btnStatus" class="btn btn-primary bg-slate-900">Ver status</button>
+        <button id="btnRefresh" class="btn btn-primary bg-brandGreen">Atualizar agora</button>
       </div>
     </div>
-
-    <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
-      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Ambiente</div>
-        <div class="mt-1 font-semibold text-slate-800">Produção</div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Status geral</div>
-        <div class="mt-1 font-semibold text-slate-800" id="statusOverall">{{ status.overall or 'Operacional' }}</div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Última verificação</div>
-        <div class="mt-1 font-semibold text-slate-800" id="statusLastCheck">{{ status.last_check or '--' }}</div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-        <div class="text-[11px] uppercase tracking-[.2em] text-slate-400">Notificações</div>
-        <div class="mt-1 font-semibold text-slate-800">Ativas</div>
-      </div>
+    <div class="mt-5 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-xs text-slate-400">Status geral</div><div id="statusOverall" class="mt-1 font-semibold text-slate-800">{{ status.overall or 'Operacional' }}</div></div>
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-xs text-slate-400">Ultima verificacao</div><div id="statusLastCheck" class="mt-1 font-semibold text-slate-800">{{ status.last_check or '--' }}</div></div>
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-xs text-slate-400">Lotes de e-mail</div><div class="mt-1 font-semibold text-slate-800">{{ email_batches|length }}</div></div>
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-xs text-slate-400">Ultimo backup</div><div class="mt-1 font-semibold text-slate-800">{{ last_backup or '--' }}</div></div>
     </div>
   </section>
 
-  <div class="grid grid-cols-12 gap-7">
-    <div class="col-span-12 lg:col-span-3 space-y-6">
-      <div class="glass p-6">
-        <div class="text-xs uppercase tracking-[.25em] text-slate-400">Menu</div>
-        <div class="mt-4 grid gap-2 text-sm">
-          <a class="btn btn-secondary rounded-2xl border border-slate-200 bg-white px-4 py-3 font-semibold" href="#geral">Geral</a>
-          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#email">E-mail de cobranca</a>
-          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#aparencia">Aparência</a>
-          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#status">Saúde geral</a>
-          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#logs">Logs do sistema</a>
-          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#backup">Backup e restore</a>
-          <a class="rounded-2xl border border-transparent px-4 py-3 text-slate-600 hover:bg-slate-50" href="#usuarios">Usuários</a>
+  <div class="grid grid-cols-12 gap-6">
+    <aside class="col-span-12 space-y-4 lg:col-span-3">
+      <div class="glass p-5">
+        <div class="text-xs uppercase tracking-[.2em] text-slate-400">Menu</div>
+        <div class="mt-3 grid gap-2 text-sm">
+          <a class="btn btn-secondary justify-start" href="#geral">Geral</a>
+          <a class="btn btn-secondary justify-start" href="#status">Status</a>
+          <a class="btn btn-secondary justify-start" href="#logs">Logs do sistema</a>
+          <a class="btn btn-secondary justify-start" href="#email-history">Historico de e-mails</a>
+          <a class="btn btn-secondary justify-start" href="#backup">Backup e restore</a>
+          <a class="btn btn-secondary justify-start" href="#usuarios">Usuarios</a>
           {% if user and user.role == 'admin' %}
-            <a class="rounded-2xl border border-transparent px-4 py-3 text-rose-600 hover:bg-rose-50" href="#limpeza">Limpeza de dados</a>
+          <a class="btn btn-secondary justify-start text-rose-700" href="#limpeza">Limpeza de dados</a>
           {% endif %}
         </div>
       </div>
-
-      <div class="glass p-6">
-        <div class="text-sm font-semibold">Ações rápidas</div>
-        <div class="mt-3 grid gap-2 text-sm">
-          <button class="btn btn-secondary flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50" onclick="location.href='#logs'">Ver últimos logs <span class="text-xs text-slate-400">Ctrl + L</span></button>
-          <button class="btn btn-secondary flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50" onclick="location.href='#backup'">Gerenciar backups <span class="text-xs text-slate-400">Ctrl + B</span></button>
-          <button class="btn btn-secondary flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50" onclick="location.href='#geral'">Preferências gerais <span class="text-xs text-slate-400">Ctrl + G</span></button>
+      <div class="glass p-5 text-sm">
+        <div class="font-semibold">Resumo rapido</div>
+        <div class="mt-3 space-y-2">
+          <div class="flex items-center justify-between"><span class="text-slate-500">Status</span><span class="font-semibold">{{ status.overall or 'Operacional' }}</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-500">Ultimo restore</span><span class="font-semibold">{{ last_restore or '--' }}</span></div>
+          <div class="flex items-center justify-between"><span class="text-slate-500">Mensagens</span><span class="font-semibold">{{ email_messages|length }}</span></div>
         </div>
       </div>
-    </div>
+    </aside>
 
-    <div class="col-span-12 lg:col-span-6 space-y-6">
-      <div class="glass p-6">
+    <div class="col-span-12 space-y-6 lg:col-span-9">
+      <section id="geral" class="grid gap-6 xl:grid-cols-2">
+        <div class="glass p-6">
+          <div class="text-sm font-semibold">Preferencias gerais</div>
+          <form class="mt-4 space-y-3 text-sm" method="post" action="/configuracoes/preferencias">
+            <label class="flex items-center gap-3"><input name="maintenance_notifications" type="checkbox" {% if preferences.maintenance_notifications %}checked{% endif %} /> Enviar notificacoes de manutencao</label>
+            <label class="flex items-center gap-3"><input name="critical_events" type="checkbox" {% if preferences.critical_events %}checked{% endif %} /> Registrar eventos criticos automaticamente</label>
+            <label class="flex items-center gap-3"><input name="quiet_hours" type="checkbox" {% if preferences.quiet_hours %}checked{% endif %} /> Modo silencioso</label>
+            <label class="flex items-center gap-3"><input name="auto_backup" type="checkbox" {% if preferences.auto_backup %}checked{% endif %} /> Backup automatico diario</label>
+            <label class="flex items-center gap-3"><input name="email_reports" type="checkbox" {% if preferences.email_reports %}checked{% endif %} /> Enviar relatorios semanais</label>
+            <label class="flex items-center gap-3"><input name="auto_due_reminder_emails" type="checkbox" {% if preferences.auto_due_reminder_emails %}checked{% endif %} /> Lembretes automaticos</label>
+            <button class="btn btn-primary bg-slate-900">Salvar preferencias</button>
+          </form>
+        </div>
+
+        <div class="glass p-6">
+          <div class="text-sm font-semibold">SMTP / E-mail de cobranca</div>
+          <form class="mt-4 grid gap-3 text-sm md:grid-cols-2" method="post" action="/configuracoes/email">
+            <input name="smtp_host" class="input" placeholder="SMTP host" value="{{ email_settings.smtp_host or '' }}" />
+            <input name="smtp_port" class="input" placeholder="Porta" value="{{ email_settings.smtp_port or '' }}" />
+            <input name="smtp_user" class="input" placeholder="Usuario" value="{{ email_settings.smtp_user or '' }}" />
+            <input name="smtp_from" class="input" placeholder="Remetente" value="{{ email_settings.smtp_from or '' }}" />
+            <input name="smtp_pass" type="password" class="input md:col-span-2" placeholder="Senha (deixe em branco para manter)" />
+            <label class="flex items-center gap-3 md:col-span-2"><input name="smtp_tls" type="checkbox" {% if email_settings.smtp_tls %}checked{% endif %} /> Usar TLS</label>
+            <button class="btn btn-primary bg-slate-900 md:col-span-2">Salvar e-mail</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="status" class="glass p-6">
         <div class="flex items-center justify-between">
-          <div>
-            <div class="text-sm font-semibold">Centro de configurações</div>
-            <div class="mt-1 text-xs text-slate-500">Acompanhe detalhes do sistema, logs e backups em tempo real.</div>
-          </div>
-          <span class="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800">Sistema em monitoramento</span>
+          <div class="text-sm font-semibold">Status dos servicos</div>
+          <button id="btnRefreshInline" class="text-sm font-semibold text-brandGreen">Atualizar</button>
         </div>
-      </div>
-
-      <div class="glass p-6" id="aparencia">
-        <div class="text-sm font-semibold">Aparência</div>
-        <div class="mt-1 text-xs text-slate-500">Personalize o tema e o modo de exibição.</div>
-        <div class="mt-4 flex items-center justify-between">
-          <div>
-            <div class="text-sm font-semibold">Modo escuro</div>
-            <div class="text-xs text-slate-500">Alterne entre modo claro e escuro.</div>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input id="themeToggle" type="checkbox" class="sr-only peer" />
-            <div class="h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-brandGreen transition">
-              <div class="h-5 w-5 translate-x-0.5 translate-y-0.5 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5"></div>
-            </div>
-          </label>
+        <div class="mt-4 grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-slate-500">API</div><div id="badgeApi" class="mt-1 font-semibold">{{ status.services.api if status.services else 'Online' }}</div></div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-slate-500">Banco</div><div id="badgeDb" class="mt-1 font-semibold">{{ status.services.db if status.services else 'Online' }}</div></div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-slate-500">Fila</div><div id="badgeQueue" class="mt-1 font-semibold">{{ status.services.queue if status.services else 'Online' }}</div></div>
+          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3"><div class="text-slate-500">Storage</div><div id="badgeStorage" class="mt-1 font-semibold">{{ status.services.storage if status.services else 'Online' }}</div></div>
         </div>
-        <div class="mt-4 flex items-center justify-between">
-          <div>
-            <div class="text-sm font-semibold">Modo compacto</div>
-            <div class="text-xs text-slate-500">Reduz animações e efeitos visuais.</div>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input id="compactToggle" type="checkbox" class="sr-only peer" />
-            <div class="h-6 w-11 rounded-full bg-slate-200 peer-checked:bg-brandGreen transition">
-              <div class="h-5 w-5 translate-x-0.5 translate-y-0.5 rounded-full bg-white shadow-sm transition peer-checked:translate-x-5"></div>
-            </div>
-          </label>
-        </div>
-      </div>
+      </section>
 
-      <div class="glass p-6" id="geral">
-        <div class="text-sm font-semibold">Preferências gerais</div>
-        <div class="mt-1 text-xs text-slate-500">Defina alertas e rotinas do sistema.</div>
-        <form class="mt-4 space-y-3 text-sm" method="post" action="/configuracoes/preferencias">
-          <label class="flex items-center gap-3"><input name="maintenance_notifications" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.maintenance_notifications %}checked{% endif %} /> Enviar notificações de manutenção</label>
-          <label class="flex items-center gap-3"><input name="critical_events" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.critical_events %}checked{% endif %} /> Registrar eventos críticos automaticamente</label>
-          <label class="flex items-center gap-3"><input name="quiet_hours" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.quiet_hours %}checked{% endif %} /> Modo silencioso em horários fixos</label>
-          <label class="flex items-center gap-3"><input name="auto_backup" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.auto_backup %}checked{% endif %} /> Backup automático diário</label>
-          <label class="flex items-center gap-3"><input name="email_reports" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.email_reports %}checked{% endif %} /> Enviar relatórios semanais por e-mail</label>
-          <label class="flex items-center gap-3"><input name="auto_due_reminder_emails" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if preferences.auto_due_reminder_emails %}checked{% endif %} /> Enviar lembretes automáticos (10, 5, 3 e 1 dia antes do vencimento)</label>
-          <button class="btn btn-primary mt-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Salvar preferências</button>
-        </form>
-      </div>
-
-      <div class="glass p-6" id="email">
-        <div class="text-sm font-semibold">E-mail de cobranca</div>
-        <div class="mt-1 text-xs text-slate-500">Configure o SMTP usado para enviar avisos e cobrancas. Se algum campo ficar vazio, o sistema usa os valores do .env.</div>
-        <form class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" method="post" action="/configuracoes/email">
-          <input name="smtp_host" class="input" placeholder="SMTP host" value="{{ email_settings.smtp_host or '' }}" />
-          <input name="smtp_port" class="input" placeholder="Porta" value="{{ email_settings.smtp_port or '' }}" />
-          <input name="smtp_user" class="input" placeholder="Usuario" value="{{ email_settings.smtp_user or '' }}" />
-          <input name="smtp_from" class="input" placeholder="Remetente (From)" value="{{ email_settings.smtp_from or '' }}" />
-          <input name="smtp_pass" type="password" class="input md:col-span-2" placeholder="Senha (deixe em branco para manter)" value="" />
-          <label class="flex items-center gap-3 text-sm">
-            <input name="smtp_tls" type="checkbox" class="h-4 w-4 rounded border-slate-300" {% if email_settings.smtp_tls %}checked{% endif %} />
-            Usar TLS
-          </label>
-          <button class="btn btn-primary md:col-span-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Salvar e-mail</button>
-        </form>
-      </div>
-
-      <div class="glass p-6" id="status">
-        <div class="flex items-center justify-between">
-          <div class="text-sm font-semibold">Status dos serviços</div>
-          <button id="btnRefreshInline" class="text-sm font-semibold text-brandGreen hover:opacity-80">Atualizar</button>
-        </div>
-        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div class="text-slate-500">API principal</div>
-            <div class="mt-1 font-semibold" id="badgeApi">{{ status.services.api if status.services else 'Online' }}</div>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div class="text-slate-500">Banco de dados</div>
-            <div class="mt-1 font-semibold" id="badgeDb">{{ status.services.db if status.services else 'Online' }}</div>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div class="text-slate-500">Fila e eventos</div>
-            <div class="mt-1 font-semibold" id="badgeQueue">{{ status.services.queue if status.services else 'Online' }}</div>
-          </div>
-          <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div class="text-slate-500">Storage</div>
-            <div class="mt-1 font-semibold" id="badgeStorage">{{ status.services.storage if status.services else 'Online' }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="glass p-6" id="logs">
-        <div class="flex items-center justify-between gap-3">
+      <section id="logs" class="glass p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div class="text-sm font-semibold">Logs do sistema</div>
-            <div class="mt-1 text-xs text-slate-500">Últimas alterações e ações realizadas no sistema.</div>
+            <div class="mt-1 text-xs text-slate-500">Busca, paginacao, ordenacao e visualizacao responsiva.</div>
           </div>
-          <div class="flex items-center gap-2">
-            <a class="text-sm font-semibold text-brandGreen hover:opacity-80" href="/configuracoes?limit=200&module={{ filters.module }}&user_id={{ filters.user_id }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}#logs">Ver mais</a>
-            <a class="text-sm font-semibold text-slate-600 hover:opacity-80" href="/configuracoes/logs.csv?module={{ filters.module }}&user_id={{ filters.user_id }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">Exportar CSV</a>
-          </div>
+          <a class="text-sm font-semibold text-slate-600" href="/configuracoes/logs.csv?module={{ filters.module }}&user_id={{ filters.user_id }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">Exportar CSV</a>
         </div>
-        <form class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm" method="get" action="/configuracoes#logs">
-          <select name="module" class="input">
-            <option value="">Todos os módulos</option>
-            {% for ent in entities %}
-              <option value="{{ ent }}" {% if filters.module == ent %}selected{% endif %}>{{ ent }}</option>
-            {% endfor %}
-          </select>
-          <select name="user_id" class="input">
-            <option value="">Todos os usuários</option>
-            {% for u in users %}
-              <option value="{{ u.id }}" {% if filters.user_id|string == u.id|string %}selected{% endif %}>{{ u.name }} ({{ u.email }})</option>
-            {% endfor %}
-          </select>
+        <form id="logsFilterForm" class="mt-4 grid gap-3 text-sm md:grid-cols-4" method="get" action="/configuracoes">
+          <input type="hidden" name="limit" value="300" />
+          <select name="module" class="input"><option value="">Todos os modulos</option>{% for ent in entities %}<option value="{{ ent }}" {% if filters.module == ent %}selected{% endif %}>{{ ent }}</option>{% endfor %}</select>
+          <select name="user_id" class="input"><option value="">Todos os usuarios</option>{% for u in users %}<option value="{{ u.id }}" {% if filters.user_id|string == u.id|string %}selected{% endif %}>{{ u.name }} ({{ u.email }})</option>{% endfor %}</select>
           <input name="date_from" type="date" class="input" value="{{ filters.date_from }}" />
           <input name="date_to" type="date" class="input" value="{{ filters.date_to }}" />
-          <button class="btn btn-primary md:col-span-4 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Filtrar</button>
+          <button class="btn btn-primary bg-slate-900 md:col-span-4">Aplicar filtros</button>
         </form>
-        <div class="mt-3 text-xs text-slate-500">Atualização em tempo real.</div>
-        <div class="mt-4 space-y-2 text-sm" id="logList" data-last-id="{{ logs[0].id if logs and logs|length > 0 else 0 }}">
-          {% if logs and logs|length > 0 %}
-            {% for log in logs %}
-              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3" data-log-id="{{ log.id }}">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="font-semibold text-slate-800">{{ log.entity }} • {{ log.action }}</div>
-                  <div class="text-xs text-slate-500">{{ log.created_at.strftime('%d/%m/%Y %H:%M') if log.created_at else '' }}</div>
-                </div>
-                <div class="mt-1 text-xs text-slate-500">Usuário: {{ log.actor_user_id or 'sistema' }} {% if log.entity_id %}• ID {{ log.entity_id }}{% endif %}</div>
-              </div>
-            {% endfor %}
-          {% else %}
-            <div class="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-slate-500">Nenhum log registrado ainda.</div>
-          {% endif %}
+        {% if log_filter_error %}<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">{{ log_filter_error }}</div>{% endif %}
+        <div class="mt-4 overflow-x-auto">
+          <table id="logsTable" class="display responsive nowrap w-full text-sm">
+            <thead><tr><th>ID</th><th>Modulo</th><th>Acao</th><th>Usuario</th><th>IP</th><th>Data</th></tr></thead>
+            <tbody>
+              {% for log in logs %}
+              {% set actor = user_map.get(log.actor_user_id) if log.actor_user_id else None %}
+              <tr>
+                <td>{{ log.id }}</td>
+                <td>{{ log.entity }}</td>
+                <td>{% if log.entity_id %}{{ log.action }} #{{ log.entity_id }}{% else %}{{ log.action }}{% endif %}</td>
+                <td>{% if actor %}{{ actor.name }}{% elif log.actor_user_id %}Usuario #{{ log.actor_user_id }}{% else %}Sistema{% endif %}</td>
+                <td>{{ log.ip or '-' }}</td>
+                <td data-order="{{ log.created_at.isoformat() if log.created_at else '' }}">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') if log.created_at else '-' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </section>
 
-      <div class="glass p-6" id="usuarios">
-        <div class="text-sm font-semibold">Cadastro de usuários</div>
-        <div class="mt-1 text-xs text-slate-500">Usuários autorizados a acessar o sistema.</div>
-        <form class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" method="post" action="/configuracoes/usuarios/create">
-          <input name="name" class="input" placeholder="Nome" required />
-          <input name="email" type="email" class="input" placeholder="Email" required />
-          <input name="password" type="password" class="input" placeholder="Senha" required />
-          <select name="role" class="input">
-            <option value="admin">Administrador</option>
-            <option value="gestor">Gestor</option>
-            <option value="financeiro">Financeiro</option>
-          </select>
-          <button class="btn btn-primary md:col-span-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Criar usuário</button>
-        </form>
-        <div class="mt-4 space-y-2 text-sm">
-          {% for u in users %}
-            <div class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
-              <div>
-                <div class="font-semibold">{{ u.name }} <span class="text-xs text-slate-500">({{ u.role }})</span></div>
-                <div class="text-xs text-slate-500">{{ u.email }}</div>
-              </div>
-              <form method="post" action="/configuracoes/usuarios/{{ u.id }}/toggle">
-                <button class="btn btn-secondary rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50">{{ 'Desativar' if u.is_active else 'Ativar' }}</button>
-              </form>
-            </div>
-          {% endfor %}
+      <section id="email-history" class="glass p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="text-sm font-semibold">Historico de e-mails</div>
+            <div class="mt-1 text-xs text-slate-500">Agora agrupado em Configuracoes, ao lado dos logs do sistema.</div>
+          </div>
+          <a class="btn btn-secondary" href="/email/lote?competence={{ email_history_competence }}">Abrir area de e-mails</a>
         </div>
-      </div>
+        <div class="mt-4 overflow-x-auto">
+          <table id="emailBatchesTable" class="display responsive nowrap w-full text-sm">
+            <thead><tr><th>Lote</th><th>Competencia</th><th>Status</th><th>Criado em</th></tr></thead>
+            <tbody>
+              {% for batch in email_batches %}
+              <tr>
+                <td>#{{ batch.id }}</td>
+                <td>{{ batch.competence_month|competence_br if batch.competence_month else '-' }}</td>
+                <td>{{ batch.status }}</td>
+                <td data-order="{{ batch.created_at.isoformat() if batch.created_at else '' }}">{{ batch.created_at.strftime('%d/%m/%Y %H:%M:%S') if batch.created_at else '-' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+          <table id="emailMessagesTable" class="display responsive nowrap w-full text-sm">
+            <thead><tr><th>Lote</th><th>Competencia</th><th>Para</th><th>Assunto</th><th>Status</th><th>Erro</th></tr></thead>
+            <tbody>
+              {% for message, batch in email_messages %}
+              <tr>
+                <td>#{{ batch.id }}</td>
+                <td>{{ batch.competence_month|competence_br if batch.competence_month else '-' }}</td>
+                <td>{{ message.to_emails }}</td>
+                <td>{{ message.subject }}</td>
+                <td>{{ message.status }}</td>
+                <td class="max-w-[280px] whitespace-normal break-words text-xs text-rose-700">{{ message.error or '-' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="grid gap-6 xl:grid-cols-2">
+        <div id="usuarios" class="glass p-6">
+          <div class="text-sm font-semibold">Usuarios</div>
+          <form class="mt-4 grid gap-3 text-sm md:grid-cols-2" method="post" action="/configuracoes/usuarios/create">
+            <input name="name" class="input" placeholder="Nome" required />
+            <input name="email" type="email" class="input" placeholder="Email" required />
+            <input name="password" type="password" class="input" placeholder="Senha" required />
+            <select name="role" class="input"><option value="admin">Administrador</option><option value="gestor">Gestor</option><option value="financeiro">Financeiro</option></select>
+            <button class="btn btn-primary bg-slate-900 md:col-span-2">Criar usuario</button>
+          </form>
+          <div class="mt-4 space-y-2 text-sm">
+            {% for u in users %}
+            <div class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <div><div class="font-semibold">{{ u.name }}</div><div class="text-xs text-slate-500">{{ u.email }} • {{ u.role }}</div></div>
+              <form method="post" action="/configuracoes/usuarios/{{ u.id }}/toggle"><button class="btn btn-secondary px-3 py-1.5 text-xs">{{ 'Desativar' if u.is_active else 'Ativar' }}</button></form>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div id="backup" class="glass p-6">
+          <div class="text-sm font-semibold">Backup e restore</div>
+          <div class="mt-2 text-xs text-slate-500">{% if db_kind == 'postgres' %}Backup via pg_dump (PostgreSQL).{% elif db_kind == 'sqlite' %}Backup copia o arquivo SQLite.{% else %}Banco nao identificado.{% endif %}</div>
+          <form class="mt-4" method="post" action="/configuracoes/backup/trigger"><button class="btn btn-primary w-full bg-slate-900">Executar backup agora</button></form>
+          {% if last_backup_path %}<a class="mt-3 inline-block text-xs font-semibold text-brandGreen" href="/configuracoes/backup/download">Baixar ultimo backup</a>{% endif %}
+          {% if last_backup_error %}<div class="mt-3 text-xs text-rose-600">{{ last_backup_error }}</div>{% endif %}
+          <form class="mt-4 space-y-2" method="post" action="/configuracoes/backup/restore" enctype="multipart/form-data">
+            <input class="input text-xs" type="file" name="backup_file" required />
+            <input class="input text-xs" name="confirm_restore" placeholder="RESTAURAR" required />
+            <button class="btn btn-primary w-full bg-rose-600">Restaurar backup</button>
+          </form>
+          {% if last_restore_error %}<div class="mt-3 text-xs text-rose-600">{{ last_restore_error }}</div>{% endif %}
+        </div>
+      </section>
 
       {% if user and user.role == 'admin' %}
-      <div class="glass p-6 border border-rose-200 bg-rose-50/50" id="limpeza">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <div class="text-sm font-semibold text-rose-700">Zona de risco: limpeza de dados</div>
-            <div class="mt-1 text-xs text-rose-700/70">
-              Use apenas se precisar corrigir lançamentos ou boletos. A exclusão é permanente.
-            </div>
-          </div>
-          <span class="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700">Cuidado</span>
-        </div>
-
-        {% set cleanup_reason = request.query_params.get('reason') if request else None %}
-        {% if request and request.query_params.get('danger') == 'ok' %}
-          <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-            Limpeza executada com sucesso.
-          </div>
-        {% elif request and request.query_params.get('danger') == 'err' %}
-          <div class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-            {% if cleanup_reason == 'invalid_competence' %}
-              Competência inválida. Use YYYY-MM ou MM/YYYY.
-            {% elif cleanup_reason == 'no_selection' %}
-              Selecione ao menos uma opção de limpeza.
-            {% elif cleanup_reason == 'confirm' %}
-              Confirmação inválida. Use EXCLUIR (com competência) ou EXCLUIR TUDO (geral).
-            {% elif cleanup_reason == 'execution' %}
-              Erro interno ao executar a limpeza. Verifique o log do servidor.
-            {% else %}
-              Não foi possível executar. Verifique a confirmação e selecione pelo menos uma opção.
-            {% endif %}
-          </div>
-        {% endif %}
-
+      <section id="limpeza" class="glass border border-rose-200 bg-rose-50/50 p-6">
+        <div class="text-sm font-semibold text-rose-700">Limpeza de dados</div>
         <form class="mt-4 space-y-3 text-sm" method="post" action="/configuracoes/limpeza">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs font-semibold text-rose-700">Competência (YYYY-MM ou MM/YYYY)</label>
-              <input name="competence" class="input mt-1" placeholder="2026-02" />
-              <div class="mt-1 text-[11px] text-rose-700/70">
-                Preencha para excluir apenas da competência. Se vazio, exclui tudo.
-              </div>
-            </div>
-            <div>
-              <label class="text-xs font-semibold text-rose-700">Confirmação</label>
-              <input name="confirm" class="input mt-1" placeholder="EXCLUIR ou EXCLUIR TUDO" required />
-              <div class="mt-1 text-[11px] text-rose-700/70">
-                Digite <b>EXCLUIR</b> para competência ou <b>EXCLUIR TUDO</b> para geral.
-              </div>
-            </div>
+          <div class="grid gap-3 md:grid-cols-2">
+            <input name="competence" class="input" placeholder="Competencia (2026-02)" />
+            <input name="confirm" class="input" placeholder="EXCLUIR ou EXCLUIR TUDO" required />
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_ledger" /> Excluir lançamentos (entrada/saída)</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos" /> Excluir boletos gerados + CNAB</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_installments" /> Excluir parcelas/recebíveis gerados</label>
+          <div class="grid gap-2 md:grid-cols-2">
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_ledger" /> Excluir lancamentos</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos" /> Excluir cobrancas geradas (legado)</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_installments" /> Excluir parcelas/recebiveis</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_receivables_orphans" /> Limpar contratos sem parcelas</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_pagar" /> Excluir boletos a pagar (manual)</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_pagar" /> Excluir contas a pagar (manual)</label>
             <label class="flex items-center gap-2"><input type="checkbox" name="delete_boletos_receber" /> Excluir contas a receber (manual)</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_conciliacao" /> Excluir conciliação/OFX</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_balance_adjustments" /> Zerar ajustes da prestação de contas</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_logs" /> Excluir histórico (logs)</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_reports" /> Excluir relatórios/fechamentos</label>
-            <label class="flex items-center gap-2"><input type="checkbox" name="delete_email_history" /> Excluir histórico de e-mails/lembretes</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_conciliacao" /> Excluir conciliacao/OFX</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_balance_adjustments" /> Zerar ajustes da prestacao de contas</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_logs" /> Excluir logs</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_reports" /> Excluir relatorios</label>
+            <label class="flex items-center gap-2"><input type="checkbox" name="delete_email_history" /> Excluir historico de e-mails</label>
           </div>
-
-          <button class="btn btn-primary rounded-2xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">
-            Executar limpeza
-          </button>
+          <button class="btn btn-primary bg-rose-600">Executar limpeza</button>
         </form>
-      </div>
+      </section>
       {% endif %}
-    </div>
-
-    <div class="col-span-12 lg:col-span-3 space-y-6">
-      <div class="glass p-6">
-        <div class="text-sm font-semibold">Resumo rápido</div>
-        <div class="mt-4 space-y-2 text-sm">
-          <div class="flex items-center justify-between"><span class="text-slate-600">Último backup</span><span class="font-semibold" id="lastBackup">{{ last_backup or '--' }}</span></div>
-          <div class="flex items-center justify-between"><span class="text-slate-600">Atualização do status</span><span class="font-semibold" id="statusLastCheckSummary">{{ status.last_check or '--' }}</span></div>
-          <div class="flex items-center justify-between"><span class="text-slate-600">Alertas abertos</span><span class="font-semibold">0</span></div>
-        </div>
-        <button class="btn btn-primary mt-4 w-full rounded-2xl bg-brandGreen px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-95" onclick="location.href='#status'">Ver detalhes do sistema</button>
-      </div>
-
-      <div class="glass p-6" id="backup">
-        <div class="text-sm font-semibold">Backup e restore</div>
-        {% if db_kind == 'postgres' %}
-        <div class="mt-2 text-xs text-slate-500">Backup via pg_dump (PostgreSQL). Para restaurar, envie .dump ou .sql.</div>
-        {% elif db_kind == 'sqlite' %}
-        <div class="mt-2 text-xs text-slate-500">Backup copia o arquivo SQLite. O restore substitui o arquivo atual.</div>
-        {% else %}
-        <div class="mt-2 text-xs text-slate-500">Banco nao identificado. Verifique DATABASE_URL.</div>
-        {% endif %}
-        <form class="mt-4" method="post" action="/configuracoes/backup/trigger">
-          <button class="btn btn-primary w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Executar backup agora</button>
-        </form>
-        {% if last_backup_error %}<div class="mt-3 text-xs text-rose-600">{{ last_backup_error }}</div>{% endif %}
-        {% if last_backup_path %}<a class="mt-3 inline-block text-xs font-semibold text-brandGreen" href="/configuracoes/backup/download">Baixar ultimo backup</a>{% endif %}
-        <div class="mt-4 text-xs text-slate-500">Restore apaga dados atuais. Faca com o sistema parado, se possivel.</div>
-        <form class="mt-3 space-y-2" method="post" action="/configuracoes/backup/restore" enctype="multipart/form-data">
-          <input class="input text-xs" type="file" name="backup_file" required />
-          <input class="input text-xs" name="confirm_restore" placeholder="RESTAURAR" required />
-          <button class="btn btn-primary w-full rounded-2xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-95">Restaurar backup</button>
-        </form>
-        {% if last_restore_error %}<div class="mt-3 text-xs text-rose-600">{{ last_restore_error }}</div>{% endif %}
-        {% if last_restore %}<div class="mt-2 text-xs text-slate-500">Ultimo restore: <b>{{ last_restore }}</b></div>{% endif %}
-      </div>
-
-      <div class="glass p-6 border border-dashed border-emerald-200 bg-emerald-50/50">
-        <div class="text-sm font-semibold text-emerald-900">Dica do dia</div>
-        <p class="mt-2 text-xs text-emerald-900/80">Ative alertas automáticos para ser avisado quando algum serviço sair do ar.</p>
-      </div>
     </div>
   </div>
 </div>
@@ -355,86 +271,70 @@
 
 {% block scripts_extra %}
 <script>
-  (function(){
+  (function () {
     const root = document.documentElement;
-    const themeToggle = document.getElementById('themeToggle');
-    const compactToggle = document.getElementById('compactToggle');
+    const theme = window.__erpTheme;
+    const themeToggle = document.getElementById("themeToggle");
+    const compactToggle = document.getElementById("compactToggle");
+
     if (themeToggle) {
-      const saved = localStorage.getItem('theme');
-      themeToggle.checked = saved === 'dark' || root.classList.contains('dark');
-      themeToggle.addEventListener('change', () => {
-        root.classList.toggle('dark', themeToggle.checked);
-        localStorage.setItem('theme', themeToggle.checked ? 'dark' : 'light');
-      });
+      const sync = () => {
+        const currentTheme = theme && typeof theme.get === "function" ? theme.get() : (root.classList.contains("dark") ? "dark" : "light");
+        themeToggle.checked = currentTheme === "dark";
+      };
+      sync();
+      document.addEventListener("erp:themechange", sync);
+      themeToggle.addEventListener("change", () => theme?.apply ? theme.apply(themeToggle.checked ? "dark" : "light") : null);
     }
+
     if (compactToggle) {
-      const compactSaved = localStorage.getItem('ui_compact');
-      compactToggle.checked = compactSaved === '1' || root.classList.contains('compact');
-      compactToggle.addEventListener('change', () => {
-        root.classList.toggle('compact', compactToggle.checked);
-        localStorage.setItem('ui_compact', compactToggle.checked ? '1' : '0');
+      compactToggle.checked = localStorage.getItem("ui_compact") === "1" || root.classList.contains("compact");
+      compactToggle.addEventListener("change", () => {
+        root.classList.toggle("compact", compactToggle.checked);
+        localStorage.setItem("ui_compact", compactToggle.checked ? "1" : "0");
       });
     }
 
     async function refreshStatus() {
       try {
-        const res = await fetch('/configuracoes/status/refresh', { method: 'POST' });
-        if (!res.ok) throw new Error(await res.text());
+        const res = await fetch("/configuracoes/status/refresh", { method: "POST" });
+        if (!res.ok) throw new Error();
         const data = await res.json();
-        const overall = data.overall || 'Operacional';
-        const last = data.last_check || '--';
-        document.getElementById('statusOverall').textContent = overall;
-        document.getElementById('statusLastCheck').textContent = last;
-        document.getElementById('statusLastCheckSummary').textContent = last;
-        if (data.services) {
-          document.getElementById('badgeApi').textContent = data.services.api || 'Online';
-          document.getElementById('badgeDb').textContent = data.services.db || 'Online';
-          document.getElementById('badgeQueue').textContent = data.services.queue || 'Online';
-          document.getElementById('badgeStorage').textContent = data.services.storage || 'Online';
-        }
-        if (window.toast) toast('Status atualizado com sucesso', 'ok');
+        document.getElementById("statusOverall").textContent = data.overall || "Operacional";
+        document.getElementById("statusLastCheck").textContent = data.last_check || "--";
+        document.getElementById("badgeApi").textContent = data.services?.api || "Online";
+        document.getElementById("badgeDb").textContent = data.services?.db || "Online";
+        document.getElementById("badgeQueue").textContent = data.services?.queue || "Online";
+        document.getElementById("badgeStorage").textContent = data.services?.storage || "Online";
+        window.toast && toast("Ação concluída", "ok");
       } catch (_) {
-        if (window.toast) toast('Erro ao atualizar status', 'err');
+        window.toast && toast("Erro ao atualizar status.", "err");
       }
     }
 
-    document.getElementById('btnRefresh')?.addEventListener('click', refreshStatus);
-    document.getElementById('btnRefreshInline')?.addEventListener('click', refreshStatus);
-    document.getElementById('btnStatus')?.addEventListener('click', () => {
-      location.href = '#status';
-      refreshStatus();
+    document.getElementById("btnRefresh")?.addEventListener("click", refreshStatus);
+    document.getElementById("btnRefreshInline")?.addEventListener("click", refreshStatus);
+    document.getElementById("btnStatus")?.addEventListener("click", () => { location.href = "#status"; refreshStatus(); });
+
+    document.getElementById("logsFilterForm")?.addEventListener("submit", (event) => {
+      event.currentTarget.querySelectorAll("select[name], input[name]").forEach((field) => {
+        if (field.name === "limit") return;
+        field.disabled = !String(field.value || "").trim();
+      });
     });
 
-    const logList = document.getElementById('logList');
-    let lastId = Number(logList?.dataset.lastId || '0');
-
-    async function pollLogs() {
-      if (!logList) return;
-      try {
-        const res = await fetch(`/configuracoes/logs/live?since_id=${lastId}&limit=20`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (Array.isArray(data.items) && data.items.length) {
-          data.items.reverse().forEach((item) => {
-            const row = document.createElement('div');
-            row.className = 'rounded-2xl border border-slate-200 bg-white px-4 py-3';
-            row.dataset.logId = String(item.id);
-            row.innerHTML = `
-              <div class="flex items-center justify-between gap-3">
-                <div class="font-semibold text-slate-800">${item.entity} • ${item.action}</div>
-                <div class="text-xs text-slate-500">${item.created_at || ''}</div>
-              </div>
-              <div class="mt-1 text-xs text-slate-500">Usuário: ${item.actor_user_id || 'sistema'} ${item.entity_id ? `• ID ${item.entity_id}` : ''}</div>
-            `;
-            logList.prepend(row);
-          });
-          lastId = data.last_id || lastId;
-          logList.dataset.lastId = String(lastId);
-        }
-      } catch (_) {}
-    }
-
-    setInterval(pollLogs, 5000);
+    $(function () {
+      const lang = {
+        decimal: ",", thousands: ".", emptyTable: "Nenhum registro encontrado",
+        info: "Mostrando _START_ ate _END_ de _TOTAL_ registros", infoEmpty: "Mostrando 0 ate 0 de 0 registros",
+        infoFiltered: "(filtrado de _MAX_ registros no total)", lengthMenu: "Mostrar _MENU_ registros",
+        loadingRecords: "Carregando...", processing: "Processando...", search: "Buscar:",
+        zeroRecords: "Nenhum registro encontrado", paginate: { first: "Primeiro", last: "Ultimo", next: "Proximo", previous: "Anterior" }
+      };
+      $("#logsTable").length && $("#logsTable").DataTable({ pageLength: 25, lengthMenu: [10, 25, 50, 100], order: [[5, "desc"]], language: lang, responsive: true, autoWidth: false });
+      $("#emailBatchesTable").length && $("#emailBatchesTable").DataTable({ pageLength: 10, lengthMenu: [10, 25, 50, 100], order: [[3, "desc"]], language: lang, responsive: true, autoWidth: false });
+      $("#emailMessagesTable").length && $("#emailMessagesTable").DataTable({ pageLength: 10, lengthMenu: [10, 25, 50, 100], order: [[0, "desc"]], language: lang, responsive: true, autoWidth: false });
+    });
   })();
 </script>
 {% endblock %}
